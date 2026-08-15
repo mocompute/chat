@@ -14,22 +14,37 @@ server_create :: proc(task: Task) {
 	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
 	db := task_data.app.db
-
 	server := Server{name=cmd.name}
 	err := server_db_create(&server, db)
 	if err == .Exists {
 		task_data.status = .Conflict
 		task_data.message = fmt.aprintf("server '%s' exists", server.name)
-		return
-	}
-	if err != nil {
+	} else if err != nil {
 		task_data.status = .Database_Error
 		task_data.message = fmt.aprintf("database error: %s", err)
 		return
+	} else {
+		task_data.status = .Ok
+		task_data.result = server.id
 	}
+}
 
-	task_data.status = .Ok
-	return
+server_get :: proc(task: Task) {
+	task_data := cast(^Task_Data) task.data
+	q := task_data.query.(Server_Get)
+	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
+
+	db := task_data.app.db
+	server, err := server_db_retrieve(db, q.name)
+	if err == .Not_Found {
+		task_data.status = .Not_Found
+	} else if err != nil {
+		task_data.status = .Database_Error
+		task_data.message = fmt.aprintf("database error: %s", err)
+	} else {
+		task_data.status = .Ok
+		task_data.result = server.id
+	}
 }
 
 server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
@@ -73,12 +88,18 @@ server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error
 	stmt := db_prepare(db, sql) or_return
 	defer db_finalize(stmt)
 
+	db_bind(stmt, {
+		{":name", name},
+	}) or_return
+
 	err = sqlite3.step(stmt)
 	if err == sqlite3.Result.Row {
 		db_columns(stmt, row, res[:]) or_return
 		self.id = res[0].(i64)
 		self.name = name
 		err = nil
+	} else if err == sqlite3.Result.Done {
+		err = .Not_Found
 	}
 	return
 }

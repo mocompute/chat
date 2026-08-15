@@ -24,12 +24,18 @@ Task_Data :: struct {
 	app: ^App,
 	command: Command,
 	query: Query,
-	result: rawptr,
+
+	result: union {
+		rawptr,
+		i64,
+	},
+
 	message: string,
 	status: enum {
 		Runtime_Error,
 		Ok,
 		Conflict,
+		Not_Found,
 		Database_Error,
 	},
 

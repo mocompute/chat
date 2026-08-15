@@ -10,12 +10,17 @@ Server_Create :: struct {
 	name: string,
 }
 
+Server_Get :: struct {
+	name: string,
+}
+
 Command :: union {
 	Database_Create,
 	Server_Create,
 }
 
 Query :: union {
+	Server_Get,
 	Version_Get,
 }
 
@@ -37,7 +42,8 @@ words_to_action :: proc(words: []string) -> (command: Command, query: Query, err
 		arity = 0
 	case
 		"db-create",
-		"server-create":
+		"server-create",
+		"server-get":
 		arity = 1
 	}
 	if arity == -1 {
@@ -53,6 +59,7 @@ words_to_action :: proc(words: []string) -> (command: Command, query: Query, err
 	case "db-create":     command = Database_Create{path=words[1]}
 	case "server-create": command = Server_Create{name=words[1]}
 
+	case "server-get":    query = Server_Get{name=words[1]}
 	case "version":       query = Version_Get{}
 	}
 	return
@@ -81,6 +88,7 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 
 	} else if query != nil {
 		switch _ in query {
+		case Server_Get:  p = server_get
 		case Version_Get: p = version_get
 		}
 

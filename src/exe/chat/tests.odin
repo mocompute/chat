@@ -16,24 +16,40 @@ test_version :: proc(t: ^testing.T) {
 	defer free(td)
 	testing.expect(t, td.status == .Ok)
 
-	result_version := transmute(i64)td.result
+	result_version := td.result.(i64)
 	expect_version := i64(1)
 	testing.expect_value(t, result_version, expect_version)
 }
 
 @(test)
-test_server_create :: proc(t: ^testing.T) {
+test_server_create_get :: proc(t: ^testing.T) {
 	app := test_db_init()
-	input: []string : {"server-create", "foo"}
+	input: []string = {"server-create", "foo"}
+	server_id: i64
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
+		server_id = td.result.(i64)
 	}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Conflict)
+	}
+
+	input = {"server-get", "foo"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		testing.expect_value(t, td.result, server_id)
+	}
+	input = {"server-get", "nonexistent"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Not_Found)
 	}
 }
 
@@ -51,7 +67,7 @@ test_db_init :: proc() -> (app: ^App) {
 	// 'Adopt' db -- this is normally just for testing purposes. The :memory: db
 	// forgets everything when it's closed (it's in the name), so the usual workflow
 	// of create/close/open doesn't work.
-	app_adopt_db(app, td.result)
+	app_adopt_db(app, td.result.(rawptr))
 	return
 }
 

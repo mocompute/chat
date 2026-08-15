@@ -33,7 +33,7 @@ version_get :: proc(task: Task) {
 		task_data.message = fmt.aprintf("failed to retrieve configuration: %s", err)
 	} else {
 		task_data.status = .Ok
-		task_data.result = transmute(rawptr)i64(config.version)
+		task_data.result = i64(config.version)
 	}
 }
 
