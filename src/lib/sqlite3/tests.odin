@@ -1,3 +1,4 @@
+#+test
 package sqlite3
 
 import "core:c"
