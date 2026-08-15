@@ -28,11 +28,7 @@ version_get :: proc(task: Task) {
 	db := task_data.app.db
 
 	config, err := config_db_retrieve(db)
-	if err != nil {
-		task_data.status = .Runtime_Error
-		task_data.message = fmt.aprintf("failed to retrieve configuration: %s", err)
-	} else {
-		task_data.status = .Ok
+	if !is_db_error(err, task_data) {
 		task_data.result = i64(config.version)
 	}
 }
