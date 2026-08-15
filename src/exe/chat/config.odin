@@ -45,14 +45,12 @@ config_db_create :: proc(self: ^Config, db: Db) -> (err: Db_Error) {
 	INSERT OR IGNORE INTO config(id, version, pepper)
 	VALUES(:id, :version, :pepper);
 	`
-	stmt := db_prepare(db, sql) or_return
-	defer db_finalize(stmt)
-
-	db_bind(stmt, {
+	stmt := db_prepare_bind(db, sql, {
 		{":id", self.id},
 		{":version", CONFIG_VERSION},
 		{":pepper", self.pepper[:]},
 	}) or_return
+	defer db_finalize(stmt)
 
 	err = sqlite3.step(stmt)
 	if err == sqlite3.Result.Done do err = nil

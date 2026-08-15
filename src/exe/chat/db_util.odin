@@ -27,6 +27,12 @@ Db_Row_Spec :: []Db_Column_Spec
 
 MAX_COLUMNS :: 32
 
+db_prepare_bind :: proc(db: Db, sql: cstring, specs: []Db_Bind_Spec) -> (stmt: sqlite3.Statement, err: Db_Error) {
+	stmt = db_prepare(db, sql) or_return
+	db_bind(stmt, specs) or_return
+	return
+}
+
 db_bind :: proc(stmt: sqlite3.Statement, specs: []Db_Bind_Spec) -> (err: Db_Error) {
 	using sqlite3
 	clear_bindings(stmt)

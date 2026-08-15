@@ -46,14 +46,12 @@ user_db_create :: proc(self: ^User, db: Db) -> (err: Db_Error) {
 	INSERT INTO user (username, password, salt)
 	VALUES(:username, :password, :salt);
 	`
-	stmt := db_prepare(db, sql) or_return
-	defer db_finalize(stmt)
-
-	db_bind(stmt, {
+	stmt := db_prepare_bind(db, sql, {
 		{":username", self.username},
 		{":password", self.hashed_password[:]},
 		{":salt", self.salt[:]},
 	}) or_return
+	defer db_finalize(stmt)
 
 	err = sqlite3.step(stmt)
 
@@ -72,10 +70,8 @@ user_db_retrieve :: proc(db: Db, username: string) -> (self: User, err: Db_Error
 	row := Db_Row_Spec{{"id", i64}, {"password", []u8}, {"salt", []u8}}
 	res :  [3]Db_Value
 
-	stmt := db_prepare(db, sql) or_return
+	stmt := db_prepare_bind(db, sql, {{":username", username}}) or_return
 	defer db_finalize(stmt)
-
-	db_bind(stmt, {{":username", username}}) or_return
 
 	err = sqlite3.step(stmt)
 	if err == sqlite3.Result.Row {

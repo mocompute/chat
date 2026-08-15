@@ -63,11 +63,11 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 	INSERT INTO server (name)
 	VALUES (:name);
 	`
-	stmt := db_prepare(db, sql) or_return
-	defer db_finalize(stmt)
-	db_bind(stmt, {
+	stmt := db_prepare_bind(db, sql, {
 		{":name", self.name},
 	}) or_return
+	defer db_finalize(stmt)
+
 	err = sqlite3.step(stmt)
 	if err == sqlite3.Result.Done {
 		err = nil
@@ -85,12 +85,10 @@ server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error
 	row := Db_Row_Spec{{"id", i64}}
 	res: [1]Db_Value
 
-	stmt := db_prepare(db, sql) or_return
-	defer db_finalize(stmt)
-
-	db_bind(stmt, {
+	stmt := db_prepare_bind(db, sql, {
 		{":name", name},
 	}) or_return
+	defer db_finalize(stmt)
 
 	err = sqlite3.step(stmt)
 	if err == sqlite3.Result.Row {
