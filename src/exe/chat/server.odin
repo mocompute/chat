@@ -9,6 +9,10 @@ Server :: struct {
 	name: string,
 }
 
+Server_Row  :: Db_Row_Spec{{"id", i64}, {"uuid", []u8}, {"name", cstring}}
+Server_Cols :: "id, uuid, name"
+Server_Cols_N :: 3
+
 is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (is_error: bool) {
 	if err == .Exists {
 		is_error = true
@@ -88,12 +92,7 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 }
 
 server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error) {
-	sql: cstring: `-- sql
-	SELECT id, uuid FROM server WHERE name = :name
-	`
-	row := Db_Row_Spec{{"id", i64}, {"uuid", []u8}}
-	res: [2]Db_Value
-
+	sql: cstring: `SELECT ` + Server_Cols + ` FROM server WHERE name = :name`
 	stmt := db_prepare_bind(db, sql, {
 		{":name", name},
 	}) or_return
@@ -101,16 +100,23 @@ server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error
 
 	err = sqlite3.step(stmt)
 	if err == sqlite3.Result.Row {
-		db_columns(stmt, row, res[:]) or_return
-		self.id = res[0].(i64)
-
-		uuid := res[1].([]u8)
-		copy(self.uuid[:], uuid[:])
-
-		self.name = name
+		self = server_from_db_row(stmt) or_return
 		err = nil
 	} else if err == sqlite3.Result.Done {
 		err = .Not_Found
 	}
+	return
+}
+
+server_from_db_row :: proc(stmt: sqlite3.Statement) -> (self: Server, err: Db_Error) {
+	res: [Server_Cols_N]Db_Value
+
+	db_columns(stmt, Server_Row, res[:]) or_return
+	self.id = res[0].(i64)
+
+	uuid := res[1].([]u8)
+	copy(self.uuid[:], uuid[:])
+
+	self.name = string(res[2].(cstring))
 	return
 }

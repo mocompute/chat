@@ -3,6 +3,7 @@ package main
 
 import "../../lib/sqlite3"
 import "core:c"
+import "core:fmt"
 import "core:slice"
 
 Db_Value :: union {
@@ -90,6 +91,8 @@ db_columns :: proc(stmt: sqlite3.Statement, specs: []Db_Column_Spec, out: []Db_V
 		case []u8:
 			data_size := column_bytes(stmt, col_idx)
 			out[i_specs] = slice.bytes_from_ptr(column_blob(stmt, col_idx), int(data_size))
+		case:
+			fatal(fmt.tprintf("fatal: unknown result column type: %v", s.type))
 		}
 	}
 	return
