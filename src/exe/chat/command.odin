@@ -67,14 +67,16 @@ words_to_action :: proc(words: []string) -> (command: Command, query: Query, err
 	case "db-create":     command = Database_Create{path=words[1]}
 	case "server-create": command = Server_Create{name=words[1]}
 
-	case "server-lookup-name":  query = Server_Lookup_Name{name=words[1]}
+	case "server-lookup-name": query = Server_Lookup_Name{name=words[1]}
+
 	case "server-lookup-uuid":
 		if uuid, ok := uuid_from_hex(words[1]); ok {
 			query = Server_Lookup_Uuid{uuid=uuid}
 		} else {
 			err = .Bad_Argument
 		}
-	case "version":             query = Version_Get{}
+
+	case "version":  query = Version_Get{}
 	}
 	return
 }

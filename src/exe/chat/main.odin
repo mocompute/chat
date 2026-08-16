@@ -76,7 +76,7 @@ _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Tas
 	if err == nil {
 		td = action_call(&self.command_pool, command, query, self)
 	} else {
-		fatal(action_error_to_string(err), exit_on_error)
+		fatal(fmt.tprintfln("error: %s: '%s'", action_error_to_string(err), words[0]), exit_on_error)
 		return
 	}
 
@@ -103,6 +103,7 @@ dispatch :: proc(self: ^App, words: []string) -> ^Task_Data {
 }
 
 main_dispatch :: proc(self: ^App, words: []string) {
+	assert(len(words) > 0)
 	td := _dispatch(self, words, exit_on_error=true)
 	task_data_destroy(td)
 }
@@ -119,5 +120,12 @@ main :: proc () {
 
 	app_open_db(&app, opts.db)
 	defer app_close_db(&app)
+
+	if len(opts.overflow) == 0 {
+		stderr := os.to_stream(os.stderr)
+		flags.write_usage(stderr, Options, os.args[0])
+		os.exit(1)
+	}
+
 	main_dispatch(&app, opts.overflow[:])
 }
