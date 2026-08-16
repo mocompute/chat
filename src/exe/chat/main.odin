@@ -127,8 +127,6 @@ main :: proc () {
 	if opts.v do opts.verbose = true
 	if opts.db == "" do opts.db = DEFAULT_DB_PATH
 
-	app_open_db(&app, opts.db)
-	defer app_close_db(&app)
 
 	if len(opts.overflow) == 0 {
 		stderr := os.to_stream(os.stderr)
@@ -136,5 +134,11 @@ main :: proc () {
 		os.exit(1)
 	}
 
-	main_dispatch(&app, opts.overflow[:])
+	if opts.overflow[0] != DB_CREATE_COMMAND {
+		app_open_db(&app, opts.db)
+		defer app_close_db(&app)
+		main_dispatch(&app, opts.overflow[:])
+	} else {
+		main_dispatch(&app, opts.overflow[:])
+	}
 }

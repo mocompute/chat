@@ -44,8 +44,9 @@ API_Item :: struct {
 	constructor: proc([]string) -> (Command, Query, Action_Error),
 }
 
+DB_CREATE_COMMAND :: "db-create"
 API :: [?]API_Item{
-	{"db-create", 1, mk_database_create},
+	{DB_CREATE_COMMAND, 1, mk_database_create},
 	{"server-create", 1, mk_server_create},
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
