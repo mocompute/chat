@@ -56,6 +56,17 @@ server_create :: proc(task: Task) {
 	}
 }
 
+server_lookup_uuid :: proc(task: Task) {
+	task_data := cast(^Task_Data) task.data
+	q := task_data.query.(Server_Lookup_Uuid)
+	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
+
+	server, err := server_db_lookup_uuid(db_conn, q.uuid)
+	if !is_db_error(err, task_data) {
+		task_data.result = new_clone(server)
+	}
+}
+
 server_lookup_name :: proc(task: Task) {
 	task_data := cast(^Task_Data) task.data
 	q := task_data.query.(Server_Lookup_Name)
@@ -97,6 +108,17 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 	} else if err == sqlite3.Result.Constraint {
 		err = .Exists
 	}
+	return
+}
+
+server_db_lookup_uuid :: proc(db: Db, uuid: Uuid) -> (self: Server, err: Db_Error) {
+	uuid := uuid
+	sql: cstring: `SELECT ` + Server_Cols + ` FROM server WHERE uuid = :uuid`
+	stmt := db_prepare_bind(db, sql, {
+		{":uuid", uuid[:]},
+	}) or_return
+	defer db_finalize(stmt)
+	self = db_retrieve_one(Server, stmt, server_from_row) or_return
 	return
 }
 

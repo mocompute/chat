@@ -43,7 +43,7 @@ test_server_create_get :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Conflict)
 	}
 
-	input = {"server-get", "foo"}
+	input = {"server-lookup-name", "foo"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
@@ -53,11 +53,22 @@ test_server_create_get :: proc(t: ^testing.T) {
 		testing.expect_value(t, server.uuid, server_uuid)
 		free(td.result.(rawptr))
 	}
-	input = {"server-get", "nonexistent"}
+	input = {"server-lookup-name", "nonexistent"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Not_Found)
+	}
+
+	uuid_hex := uuid_to_hex(server_uuid, context.temp_allocator)
+	input = {"server-lookup-uuid", uuid_hex}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		server := cast(^Server)td.result.(rawptr)
+		testing.expect_value(t, server.uuid, server_uuid)
+		free(td.result.(rawptr))
 	}
 }
 
