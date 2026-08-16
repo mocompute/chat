@@ -67,23 +67,23 @@ api_index_deinit :: proc() {
 	delete(api_index)
 	api_index = nil
 }
-mk_version_get :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+mk_version_get :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
 	query = Version_Get{}
 	return
 }
-mk_database_create :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+mk_database_create :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
 	command = Database_Create{path=words[1]}
 	return
 }
-mk_server_create :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+mk_server_create :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
 	command = Server_Create{name=words[1]}
 	return
 }
-mk_server_lookup_name :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+mk_server_lookup_name :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
 	query = Server_Lookup_Name{name=words[1]}
 	return
 }
-mk_server_lookup_uuid :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+mk_server_lookup_uuid :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
 	if uuid, ok := uuid_from_hex(words[1]); ok {
 		query = Server_Lookup_Uuid{uuid=uuid}
 	} else {
