@@ -1,5 +1,7 @@
 package main
 
+import "core:fmt"
+
 Version_Get :: struct {}
 
 Database_Create :: struct {
@@ -82,7 +84,7 @@ action_error_to_string :: proc(error: Action_Error) -> (msg: string) {
 action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 	if command != nil {
 		switch _ in command {
-		case Database_Create: panic("logic error")
+		case Database_Create: p = nil
 		case Server_Create:   p = server_create
 		}
 
@@ -99,14 +101,18 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 // Callback must free task_data AND task_data.message
 action_cast :: proc(task_manager: ^Task_Manager, command: Command, query: Query, app: ^App, callback: Task_Callback ) {
 	task_data, procedure := _create_task(command, query)
-	task_manager_cast(task_manager, procedure, task_data, app, callback)
+	if !handled_immediate_task(task_data, procedure, command, query) {
+		task_manager_cast(task_manager, procedure, task_data, app, callback)
+	}
 }
 
 // Caller must free task_data AND task_data.message
 action_call :: proc(task_manager: ^Task_Manager, command: Command, query: Query, app: ^App) -> (task_data: ^Task_Data) {
 	procedure: Task_Proc
 	task_data, procedure = _create_task(command, query)
-	task_manager_call(task_manager, procedure, task_data, app)
+	if !handled_immediate_task(task_data, procedure, command, query) {
+		task_manager_call(task_manager, procedure, task_data, app)
+	}
 	return
 }
 
@@ -118,5 +124,28 @@ _create_task :: proc(command: Command, query: Query) -> (task_data: ^Task_Data, 
 	task_data.query = query
 
 	procedure = action_to_procedure(command, query)
+	return
+}
+
+handled_immediate_task :: proc(task_data: ^Task_Data, procedure: Task_Proc, command: Command, query: Query) -> (handled: bool) {
+	if procedure == nil {
+		if command != nil {
+			if dc, ok := command.(Database_Create); ok {
+				// Database_Create cannot use worker pool, since pool
+				// requires existing open database connections.
+				err := create_db(dc.path)
+				if err == nil {
+					task_data.status = .Ok
+				} else {
+					task_data.status = .Runtime_Error
+					task_data.message = fmt.aprintf("%v", err)
+				}
+				return true
+			}
+		}
+
+		ensure(false, "nil procedure and no valid command")
+	}
+
 	return
 }
