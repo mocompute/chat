@@ -56,12 +56,12 @@ server_create :: proc(task: Task) {
 	}
 }
 
-server_get :: proc(task: Task) {
+server_lookup_name :: proc(task: Task) {
 	task_data := cast(^Task_Data) task.data
-	q := task_data.query.(Server_Get)
+	q := task_data.query.(Server_Lookup_Name)
 	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
-	server, err := server_db_retrieve(db_conn, q.name)
+	server, err := server_db_lookup_name(db_conn, q.name)
 	if !is_db_error(err, task_data) {
 		task_data.result = new_clone(server)
 	}
@@ -100,7 +100,7 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 	return
 }
 
-server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error) {
+server_db_lookup_name :: proc(db: Db, name: string) -> (self: Server, err: Db_Error) {
 	sql: cstring: `SELECT ` + Server_Cols + ` FROM server WHERE name = :name`
 	stmt := db_prepare_bind(db, sql, {
 		{":name", name},
