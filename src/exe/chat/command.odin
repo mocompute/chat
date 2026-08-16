@@ -82,7 +82,7 @@ action_error_to_string :: proc(error: Action_Error) -> (msg: string) {
 action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 	if command != nil {
 		switch _ in command {
-		case Database_Create: p = create_db
+		case Database_Create: panic("logic error")
 		case Server_Create:   p = server_create
 		}
 

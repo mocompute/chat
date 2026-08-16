@@ -7,6 +7,8 @@ import "core:sync"
 import "core:thread"
 @(require) import "core:fmt"
 
+import "../../lib/sqlite3"
+
 Task_Manager :: struct {
 	tickets: map[uuid.Identifier]Ticket,
 	tickets_mutex: sync.RW_Mutex,
@@ -53,21 +55,47 @@ Task :: thread.Task
 Task_Proc :: thread.Task_Proc
 Task_Callback :: #type proc(^Task_Data, rawptr)
 
+// SQLite3 per-thread connection
+@(thread_local) db_conn: sqlite3.Connection
+
+Task_Thread_Init :: struct {
+	db_path: cstring,
+}
+
+task_thread_init :: proc(thread: ^thread.Thread, user_data: rawptr) {
+	ctx := cast(^Task_Thread_Init) user_data
+	db, err := db_open_multi_threaded(ctx.db_path)
+	if err == nil {
+		db_conn = db
+	}
+}
+
+task_thread_fini :: proc(thread: ^thread.Thread, user_data: rawptr) {
+	if db_conn != nil {
+		db_close(db_conn)
+	}
+}
+
 task_data_destroy :: proc(self: ^Task_Data) {
 	delete(self.message)
 	free(self)
 }
 
-task_manager_init :: proc(self: ^Task_Manager, thread_count: int) {
+task_manager_init :: proc(self: ^Task_Manager, thread_count: int, task_thread_init_data: ^Task_Thread_Init) {
 	self.tickets = make(map[uuid.Identifier]Ticket)
-	thread.pool_init(&self.pool, os.heap_allocator(), thread_count)
+
+	ud := cast(rawptr)task_thread_init_data
+	thread.pool_init(&self.pool, os.heap_allocator(), thread_count, task_thread_init, ud, task_thread_fini, nil)
 }
 
 task_manager_start :: proc(self: ^Task_Manager) {
 	thread.pool_start(&self.pool)
 }
 
-task_manager_join :: proc(self: ^Task_Manager) {
+task_manager_drain :: proc(self: ^Task_Manager) {
+	for thread.pool_num_outstanding(&self.pool) > 0 {
+		thread.yield()
+	}
 	thread.pool_join(&self.pool)
 }
 

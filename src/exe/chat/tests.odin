@@ -1,6 +1,8 @@
 #+test
 package main
 
+import "core:os"
+import "core:path/filepath"
 import "core:testing"
 @(require) import "core:fmt"
 
@@ -57,21 +59,24 @@ test_server_create_get :: proc(t: ^testing.T) {
 
 @(deferred_out=test_db_deinit)
 test_db_init :: proc() -> (app: ^App) {
-	path :: ":memory:"
 	app = new(App)
-	app_init(app)
 
-	td := action_call(&app.command_pool, Database_Create{path=path}, nil, app)
-	defer free(td)
+	app.tmp_dir = os.make_directory_temp("", "chat_*", allocator = context.temp_allocator) or_else panic("failed to make temp dir")
+	path := filepath.join({app.tmp_dir, "test.db"}, allocator = context.temp_allocator) or_else panic("oom")
 
-	// 'Adopt' db -- this is normally just for testing purposes. The :memory: db
-	// forgets everything when it's closed (it's in the name), so the usual workflow
-	// of create/close/open doesn't work.
-	app_adopt_db(app, td.result.(rawptr))
+	err := create_db(path)
+	if err != nil {
+		fmt.eprintfln("error: failed to create database '%s': %s", path, err)
+		panic("create failed")
+	}
+
+	app_open_db(app, path)
+	free_all(context.temp_allocator)
 	return
 }
 
 test_db_deinit :: proc(app: ^App) {
-	app_deinit(app)
+	app_close_db(app)
+	os.remove_all(app.tmp_dir)
 	free(app)
 }

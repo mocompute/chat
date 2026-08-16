@@ -33,9 +33,8 @@ server_create :: proc(task: Task) {
 	cmd := task_data.command.(Server_Create)
 	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
-	db := task_data.app.db
 	server := Server{name=cmd.name}
-	err := server_db_create(&server, db)
+	err := server_db_create(&server, db_conn)
 	if !is_db_error(err, task_data) {
 		task_data.result = server.id
 	}
@@ -46,8 +45,7 @@ server_get :: proc(task: Task) {
 	q := task_data.query.(Server_Get)
 	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
-	db := task_data.app.db
-	server, err := server_db_retrieve(db, q.name)
+	server, err := server_db_retrieve(db_conn, q.name)
 	if !is_db_error(err, task_data) {
 		task_data.result = server.id
 	}

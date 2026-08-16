@@ -32,15 +32,32 @@ Db_Error :: union #shared_nil {
 Db :: sqlite3.Connection
 Db_Statement_Callback :: proc(sqlite3.Statement)
 
-db_open :: proc(filename: cstring) -> (db: Db, err: Db_Error) {
+db_open_flags :: proc(filename: cstring, flags: c.int) -> (db: Db, err: Db_Error) {
 	using sqlite3
 
-	open(filename, &db) or_return
+	open_v2(filename, &db, flags, transmute(cstring)c.NULL) or_return
 	sql: cstring: `-- sql
 	PRAGMA foreign_keys = ON;
 	PRAGMA journal_mode = WAL;
 	`
-	err = db_exec_multi_null(db, sql)
+	err = db_exec_multi(db, sql)
+	return
+}
+
+db_open :: proc(filename: cstring) -> (db: Db, err: Db_Error) {
+	using sqlite3
+	return db_open_flags(filename, cast(c.int)(Open_Flags.READWRITE | Open_Flags.CREATE))
+}
+
+db_open_multi_threaded :: proc(filename: cstring) -> (db: Db, err: Db_Error) {
+	using sqlite3
+	db, err = db_open_flags(filename, cast(c.int)(Open_Flags.READWRITE | Open_Flags.CREATE | Open_Flags.NOMUTEX))
+	if err != nil do return
+	sql: cstring: `-- sql
+	PRAGMA synchronous = NORMAL;
+	PRAGMA busy_timeout = 5000;
+	`
+	err = db_exec_multi(db, sql)
 	return
 }
 
@@ -53,11 +70,19 @@ db_open_memory :: proc() -> (db: Db, err: Db_Error) {
 	sql: cstring: `-- sql
 	PRAGMA foreign_keys = ON;
 	`
-	err = db_exec_multi_null(db, sql)
+	err = db_exec_multi(db, sql)
 	return
 }
 
 db_close :: proc(db: Db) -> (err: Db_Error) {
+	sql: cstring: `-- sql
+	PRAGMA analysis_limit = 500;
+	PRAGMA optimize;
+	`
+	err = db_exec_multi(db, sql)
+	if err != nil {
+		fmt.eprintfln("error: error before closing database: %s", err)
+	}
 	sqlite3.close(db) or_return
 	return
 }
@@ -101,7 +126,28 @@ db_exec_multi_null :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
 
 		err = step(stmt)
 		if err != .Done {
+			fmt.eprintfln("error: expected null: '%s', got %s", sql, err)
 			return .Expected_Null_Return
+		}
+	}
+	return
+}
+
+db_exec_multi :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
+	using sqlite3
+
+	tail := sql
+
+	for (cast([^]u8) tail)[0] != 0 {
+		stmt: Statement
+		err = prepare_v2(db, tail, -1, &stmt, &tail)
+		if stmt == nil do return err // e.g. empty string returns ok but nil stmt
+		defer finalize(stmt)
+
+		err = step(stmt)
+		if err != .Done && err != .Row {
+			fmt.eprintfln("error: '%s', got %s", sql, err)
+			return
 		}
 	}
 	return

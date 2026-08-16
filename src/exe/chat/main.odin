@@ -4,6 +4,7 @@ import "core:flags"
 @(require) import "core:fmt"
 import "core:os"
 import "core:reflect"
+import "core:strings"
 
 DEFAULT_DB_PATH :: "chat.db"
 
@@ -15,110 +16,50 @@ Options :: struct {
 }
 
 App :: struct {
-	db: Db,
-
 	command_pool: Task_Manager,
 	query_pool: Task_Manager,
+
+	task_thread_init: Task_Thread_Init,
+
+	tmp_dir: string,	// only used by tests
 }
 
-app_init :: proc(self: ^App) {
-	task_manager_init(&self.command_pool, 1)
+app_open_db :: proc(self: ^App, db_path: string) {
+	db_path_c := strings.clone_to_cstring(db_path)
+	self.task_thread_init = {db_path=db_path_c}
+
+	task_manager_init(&self.command_pool, 1, &self.task_thread_init)
 	task_manager_start(&self.command_pool)
 
-	task_manager_init(&self.query_pool, 4) // FIXME hardcoded
+	task_manager_init(&self.query_pool, 4, &self.task_thread_init) // FIXME hardcoded
 	task_manager_start(&self.query_pool)
 }
 
-app_deinit :: proc(self: ^App) {
-	app_join(self)
-	task_manager_deinit(&self.query_pool)
+app_close_db :: proc(self: ^App) {
+	fmt.eprintln("app_close_db: draining task pools...")
+	task_manager_drain(&self.command_pool)
+	task_manager_drain(&self.query_pool)
+
 	task_manager_deinit(&self.command_pool)
+	task_manager_deinit(&self.query_pool)
 
-	if self.db != nil {
-		db_close(self.db)
-		self.db = nil
-	}
+	delete(self.task_thread_init.db_path)
+	fmt.eprintln("app_close_db: draining task pools done.")
 }
 
-app_join :: proc(self: ^App) {
-	task_manager_join(&self.query_pool)
-	task_manager_join(&self.command_pool)
-}
-
-app_open_db :: proc(self: ^App, path: string) -> (err: Db_Error) {
-	self.db, err = _open_db(path)
-	return
-}
-
-// Mostly intended for tests.
-app_adopt_db :: proc(self: ^App, db: Db) {
-	ensure(self.db == nil)
-	self.db = db
-}
-
-// Caller must retrieve Db handle from task_data.result and close it.
-create_db :: proc(task: Task) {
-	task_data := cast(^Task_Data) task.data
-	cmd := task_data.command.(Database_Create)
-	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
-
-	if cmd.path != ":memory:" && os.exists(cmd.path) {
-		task_data.message = fmt.aprintfln("file exists: %s", cmd.path)
-		task_data.status = .Conflict
+create_db :: proc(path: string) -> (err: Db_Error) {
+	if os.exists(path) {
+		err = Runtime_Error.Exists
 		return
 	}
+	path_c := strings.clone_to_cstring(path, allocator = context.temp_allocator)
+	db := db_open(path_c) or_return
+	defer db_close(db)
 
-	db: Db
-	err: Db_Error
-	if cmd.path == ":memory:" {
-		db, err = db_open_memory()
-
-	} else {
-		db, err = _open_db(cmd.path)
-	}
-
-	if err != nil {
-		task_data.message = fmt.aprintfln("db_open failed with error: %s", err)
-		task_data.status = .Runtime_Error
-		return
-	}
-
-	task_data.result = db
-
-	err = db_config(db)
-	if err != nil {
-		task_data.message = fmt.aprintfln("db_config failed with error: %s", err)
-		task_data.status = .Runtime_Error
-		return
-	}
-
-	err = db_create_tables(db)
-	if err != nil {
-		task_data.message = fmt.aprintfln("db_create_tables failed with error: %s", err)
-		task_data.status = .Runtime_Error
-		return
-	}
-
+	db_config(db) or_return
+	db_create_tables(db) or_return
 	config := config_create()
-	err = config_db_create(&config, db)
-	if err != nil {
-		task_data.message = fmt.aprintfln("config_create failed with error: %s", err)
-		task_data.status = .Runtime_Error
-		return
-	}
-
-	return
-}
-
-_open_db :: proc(path: string) -> (db: Db, err: Db_Error) {
-	buf: [1024]u8 = ---
-	if len(path) + 1 > size_of(buf) {
-		return nil, .Bad_Argument
-	}
-	copy(buf[:], path)
-	buf[len(path)] = 0
-	path_c := cstring(&buf[0])
-	db, err = db_open(path_c)
+	config_db_create(&config, db) or_return
 	return
 }
 
@@ -170,8 +111,6 @@ main_dispatch :: proc(self: ^App, words: []string) {
 
 main :: proc () {
 	app: App
-	app_init(&app)
-	defer app_deinit(&app)
 
 	opts: Options
 	flags.parse_or_exit(&opts, os.args)
@@ -179,5 +118,6 @@ main :: proc () {
 	if opts.db == "" do opts.db = DEFAULT_DB_PATH
 
 	app_open_db(&app, opts.db)
+	defer app_close_db(&app)
 	main_dispatch(&app, opts.overflow[:])
 }
