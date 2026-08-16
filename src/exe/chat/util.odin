@@ -19,7 +19,8 @@ uuid_to_hex :: proc(id: Uuid, allocator := context.allocator) -> string {
 }
 
 
-// TODO: core:encoding/hex could be enhanced to provide a non-allocating `decode`
+// TODO: When https://github.com/odin-lang/Odin/pull/7347 is merged, replace with
+// hex.decode_into_buffer
 uuid_from_hex :: proc(src: string) -> (uuid: Uuid, ok: bool) {
 	if len(src) != 32 do return
 
