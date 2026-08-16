@@ -38,47 +38,72 @@ Action_Error :: enum {
 	Bad_Argument,
 }
 
-words_to_action :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
-	if len(words) == 0 do return nil, nil, .Empty
+API_Item :: struct {
+	command_word: string,
+	arity: int,
+	constructor: proc([]string) -> (Command, Query, Action_Error),
+}
 
-	// check arity
-	arity: int = -1
-	switch words[0] {
-	case
-		"version":
-		arity = 0
-	case
-		"db-create",
-		"server-create",
-		"server-lookup-name",
-		"server-lookup-uuid":
-		arity = 1
-	}
-	if arity == -1 {
-		err = .Not_Found
-		return
-	}
-	if arity != len(words) - 1 {
-		err = .Bad_Arity
-		return
-	}
+API :: [?]API_Item{
+	{"db-create", 1, mk_database_create},
+	{"server-create", 1, mk_server_create},
+	{"server-lookup-name", 1, mk_server_lookup_name},
+	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
+	{"version", 0, mk_version_get},
+}
 
-	switch words[0] {
-	case "db-create":     command = Database_Create{path=words[1]}
-	case "server-create": command = Server_Create{name=words[1]}
-
-	case "server-lookup-name": query = Server_Lookup_Name{name=words[1]}
-
-	case "server-lookup-uuid":
-		if uuid, ok := uuid_from_hex(words[1]); ok {
-			query = Server_Lookup_Uuid{uuid=uuid}
-		} else {
-			err = .Bad_Argument
+api_index: map[string]API_Item
+api_index_init :: proc() {
+	if api_index == nil {
+		api_index = make(map[string]API_Item)
+		reserve(&api_index, len(API))
+		for item in API {
+			api_index[item.command_word] = item
 		}
-
-	case "version":  query = Version_Get{}
+	}
+}
+api_index_deinit :: proc() {
+	delete(api_index)
+	api_index = nil
+}
+mk_version_get :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+	query = Version_Get{}
+	return
+}
+mk_database_create :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+	command = Database_Create{path=words[1]}
+	return
+}
+mk_server_create :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+	command = Server_Create{name=words[1]}
+	return
+}
+mk_server_lookup_name :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+	query = Server_Lookup_Name{name=words[1]}
+	return
+}
+mk_server_lookup_uuid :: proc(words: []string)  -> (command: Command, query: Query, err: Action_Error) {
+	if uuid, ok := uuid_from_hex(words[1]); ok {
+		query = Server_Lookup_Uuid{uuid=uuid}
+	} else {
+		err = .Bad_Argument
 	}
 	return
+}
+words_to_action :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+	if len(words) == 0 do return nil, nil, .Empty
+	assert(api_index != nil)
+
+	api_item, ok := api_index[words[0]]
+	if !ok {
+		fmt.eprintfln("error: words_to_action: not found: %s", words[0])
+		fmt.eprintfln("error: words_to_action: len = %d", len(api_index))
+	}
+	if !ok do return nil, nil, .Not_Found
+
+	if api_item.arity != len(words) - 1 do return nil, nil, .Bad_Arity
+
+	return api_item.constructor(words)
 }
 
 action_error_to_string :: proc(error: Action_Error) -> (msg: string) {

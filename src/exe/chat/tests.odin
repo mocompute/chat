@@ -77,6 +77,7 @@ test_server_create_get :: proc(t: ^testing.T) {
 @(deferred_out=test_db_deinit)
 test_db_init :: proc() -> (app: ^App) {
 	app = new(App)
+	app_init(app)
 
 	app.tmp_dir = os.make_directory_temp("", "chat_*", allocator = context.temp_allocator) or_else panic("failed to make temp dir")
 	path := filepath.join({app.tmp_dir, "test.db"}, allocator = context.temp_allocator) or_else panic("oom")
@@ -95,5 +96,7 @@ test_db_init :: proc() -> (app: ^App) {
 test_db_deinit :: proc(app: ^App) {
 	app_close_db(app)
 	os.remove_all(app.tmp_dir)
+
+	app_deinit(app)
 	free(app)
 }

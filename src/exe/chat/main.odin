@@ -24,6 +24,13 @@ App :: struct {
 	tmp_dir: string,	// only used by tests
 }
 
+app_init :: proc(^App) {
+	api_index_init()
+}
+app_deinit :: proc(^App) {
+	api_index_deinit()
+}
+
 app_open_db :: proc(self: ^App, db_path: string) {
 	db_path_c := strings.clone_to_cstring(db_path)
 	self.task_thread_init = {db_path=db_path_c}
@@ -112,6 +119,8 @@ main_dispatch :: proc(self: ^App, words: []string) {
 
 main :: proc () {
 	app: App
+	app_init(&app)
+	defer app_deinit(&app)
 
 	opts: Options
 	flags.parse_or_exit(&opts, os.args)
