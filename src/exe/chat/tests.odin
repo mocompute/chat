@@ -28,11 +28,16 @@ test_server_create_get :: proc(t: ^testing.T) {
 	app := test_db_init()
 	input: []string = {"server-create", "foo"}
 	server_id: i64
+	server_uuid: Uuid
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
-		server_id = td.result.(i64)
+
+		server := cast(^Server)td.result.(rawptr)
+		server_id = server.id
+		server_uuid = server.uuid
+		free(td.result.(rawptr))
 	}
 	{
 		td := dispatch(app, input)
@@ -44,8 +49,12 @@ test_server_create_get :: proc(t: ^testing.T) {
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
+
 		testing.expect(t, td.status == .Ok)
-		testing.expect_value(t, td.result, server_id)
+		server := cast(^Server)td.result.(rawptr)
+		testing.expect_value(t, server.id, server_id)
+		testing.expect_value(t, server.uuid, server_uuid)
+		free(td.result.(rawptr))
 	}
 	input = {"server-get", "nonexistent"}
 	{

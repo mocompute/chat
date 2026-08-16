@@ -5,6 +5,7 @@ import "core:fmt"
 
 Server :: struct {
 	id: i64,
+	uuid: Uuid,
 	name: string,
 }
 
@@ -33,10 +34,10 @@ server_create :: proc(task: Task) {
 	cmd := task_data.command.(Server_Create)
 	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
-	server := Server{name=cmd.name}
+	server := Server{name=cmd.name, uuid=uuid_v7()}
 	err := server_db_create(&server, db_conn)
 	if !is_db_error(err, task_data) {
-		task_data.result = server.id
+		task_data.result = new_clone(server)
 	}
 }
 
@@ -47,14 +48,17 @@ server_get :: proc(task: Task) {
 
 	server, err := server_db_retrieve(db_conn, q.name)
 	if !is_db_error(err, task_data) {
-		task_data.result = server.id
+		task_data.result = new_clone(server)
 	}
 }
 
 server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
+	// Although UUIDs must be unique, we assume generation will never generate a
+	// duplicate, so we avoid a SQL index.
 	sql: cstring: `-- sql
 	CREATE TABLE IF NOT EXISTS server(
 	id INTEGER PRIMARY KEY,
+	uuid BLOB NOT NULL,
 	name TEXT NOT NULL UNIQUE
 	);
 	`
@@ -64,11 +68,12 @@ server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 
 server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 	sql: cstring: `-- sql
-	INSERT INTO server (name)
-	VALUES (:name);
+	INSERT INTO server (name, uuid)
+	VALUES (:name, :uuid);
 	`
 	stmt := db_prepare_bind(db, sql, {
 		{":name", self.name},
+		{":uuid", self.uuid[:]},
 	}) or_return
 	defer db_finalize(stmt)
 
@@ -84,10 +89,10 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 
 server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error) {
 	sql: cstring: `-- sql
-	SELECT id FROM server WHERE name = :name
+	SELECT id, uuid FROM server WHERE name = :name
 	`
-	row := Db_Row_Spec{{"id", i64}}
-	res: [1]Db_Value
+	row := Db_Row_Spec{{"id", i64}, {"uuid", []u8}}
+	res: [2]Db_Value
 
 	stmt := db_prepare_bind(db, sql, {
 		{":name", name},
@@ -98,6 +103,10 @@ server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error
 	if err == sqlite3.Result.Row {
 		db_columns(stmt, row, res[:]) or_return
 		self.id = res[0].(i64)
+
+		uuid := res[1].([]u8)
+		copy(self.uuid[:], uuid[:])
+
 		self.name = name
 		err = nil
 	} else if err == sqlite3.Result.Done {
