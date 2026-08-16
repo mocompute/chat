@@ -97,18 +97,11 @@ server_db_retrieve :: proc(db: Db, name: string) -> (self: Server, err: Db_Error
 		{":name", name},
 	}) or_return
 	defer db_finalize(stmt)
-
-	err = sqlite3.step(stmt)
-	if err == sqlite3.Result.Row {
-		self = server_from_db_row(stmt) or_return
-		err = nil
-	} else if err == sqlite3.Result.Done {
-		err = .Not_Found
-	}
+	self = db_retrieve_one(Server, stmt, server_from_row) or_return
 	return
 }
 
-server_from_db_row :: proc(stmt: sqlite3.Statement) -> (self: Server, err: Db_Error) {
+server_from_row :: proc(stmt: sqlite3.Statement) -> (self: Server, err: Db_Error) {
 	res: [Server_Cols_N]Db_Value
 
 	db_columns(stmt, Server_Row, res[:]) or_return

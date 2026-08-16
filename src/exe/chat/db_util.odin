@@ -97,3 +97,14 @@ db_columns :: proc(stmt: sqlite3.Statement, specs: []Db_Column_Spec, out: []Db_V
 	}
 	return
 }
+
+db_retrieve_one :: proc($T: typeid, stmt: sqlite3.Statement, construct: proc(sqlite3.Statement) -> (T, Db_Error)) -> (result: T, err: Db_Error) {
+	err = sqlite3.step(stmt)
+	if err == sqlite3.Result.Row {
+		result = construct(stmt) or_return
+		err = nil
+	} else if err == sqlite3.Result.Done {
+		err = .Not_Found
+	}
+	return
+}
