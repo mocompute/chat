@@ -1,7 +1,5 @@
 package main
 
-import "core:encoding/uuid"
-import "core:crypto"
 import "core:os"
 import "core:sync"
 import "core:thread"
@@ -10,7 +8,7 @@ import "core:thread"
 import "../../lib/sqlite3"
 
 Task_Manager :: struct {
-	tickets: map[uuid.Identifier]Ticket,
+	tickets: map[Uuid]Ticket,
 	tickets_mutex: sync.RW_Mutex,
 
 	pool: thread.Pool,
@@ -22,7 +20,7 @@ Ticket :: struct {
 }
 
 Task_Data :: struct {
-	id: uuid.Identifier,
+	id: Uuid,
 	app: ^App,
 	command: Command,
 	query: Query,
@@ -82,7 +80,7 @@ task_data_destroy :: proc(self: ^Task_Data) {
 }
 
 task_manager_init :: proc(self: ^Task_Manager, thread_count: int, task_thread_init_data: ^Task_Thread_Init) {
-	self.tickets = make(map[uuid.Identifier]Ticket)
+	self.tickets = make(map[Uuid]Ticket)
 
 	ud := cast(rawptr)task_thread_init_data
 	thread.pool_init(&self.pool, os.heap_allocator(), thread_count, task_thread_init, ud, task_thread_fini, nil)
@@ -113,11 +111,8 @@ task_manager_deinit :: proc(self: ^Task_Manager) {
 //		defer if task_data.callback != nil do task_data.callback(task_data)
 //		// ...
 //	}
-task_manager_cast :: proc(self: ^Task_Manager, procedure: thread.Task_Proc, data: ^Task_Data, app: ^App, cb: Task_Callback = nil, cb_data: rawptr = nil) -> (id: uuid.Identifier) {
-	{
-		context.random_generator = crypto.random_generator()
-		id = uuid.generate_v7()
-	}
+task_manager_cast :: proc(self: ^Task_Manager, procedure: thread.Task_Proc, data: ^Task_Data, app: ^App, cb: Task_Callback = nil, cb_data: rawptr = nil) -> (id: Uuid) {
+	id = uuid_v7()
 	if sync.rw_mutex_guard(&self.tickets_mutex) {
 		self.tickets[id] = {task_data=data, status=.In_Flight}
 	}
@@ -137,7 +132,7 @@ task_manager_call :: proc(self: ^Task_Manager, procedure: thread.Task_Proc, data
 	ensure(data == result)
 }
 
-task_manager_ticket_status :: proc(self: ^Task_Manager, id: uuid.Identifier) -> (status: Task_Status, ok: bool) {
+task_manager_ticket_status :: proc(self: ^Task_Manager, id: Uuid) -> (status: Task_Status, ok: bool) {
 	if sync.rw_mutex_shared_guard(&self.tickets_mutex) {
 		ticket, found := self.tickets[id]
 		if found {
@@ -149,7 +144,7 @@ task_manager_ticket_status :: proc(self: ^Task_Manager, id: uuid.Identifier) -> 
 	return
 }
 
-task_manager_busy_wait :: proc(self: ^Task_Manager, id: uuid.Identifier) -> (result: ^Task_Data) {
+task_manager_busy_wait :: proc(self: ^Task_Manager, id: Uuid) -> (result: ^Task_Data) {
 	ticket: Ticket
 	if sync.rw_mutex_shared_guard(&self.tickets_mutex) {
 		ticket = self.tickets[id]
@@ -187,7 +182,7 @@ task_manager_busy_wait :: proc(self: ^Task_Manager, id: uuid.Identifier) -> (res
 	}
 }
 
-task_manager_remove_task :: proc(self: ^Task_Manager, id: uuid.Identifier) {
+task_manager_remove_task :: proc(self: ^Task_Manager, id: Uuid) {
 	if sync.rw_mutex_guard(&self.tickets_mutex) {
 		delete_key(&self.tickets, id)
 	}
