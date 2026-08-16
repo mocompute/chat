@@ -103,6 +103,32 @@ Config :: enum (c.int) {
 	Rowid_In_View       = 30,
 }
 
+Open_Flags :: enum (c.int) {
+	// From sqlite3.h
+	READONLY       =  0x00000001,  /* Ok for sqlite3_open_v2() */
+	READWRITE      =  0x00000002,  /* Ok for sqlite3_open_v2() */
+	CREATE         =  0x00000004,  /* Ok for sqlite3_open_v2() */
+	DELETEONCLOSE  =  0x00000008,  /* VFS only */
+	EXCLUSIVE      =  0x00000010,  /* VFS only */
+	AUTOPROXY      =  0x00000020,  /* VFS only */
+	URI            =  0x00000040,  /* Ok for sqlite3_open_v2() */
+	MEMORY         =  0x00000080,  /* Ok for sqlite3_open_v2() */
+	MAIN_DB        =  0x00000100,  /* VFS only */
+	TEMP_DB        =  0x00000200,  /* VFS only */
+	TRANSIENT_DB   =  0x00000400,  /* VFS only */
+	MAIN_JOURNAL   =  0x00000800,  /* VFS only */
+	TEMP_JOURNAL   =  0x00001000,  /* VFS only */
+	SUBJOURNAL     =  0x00002000,  /* VFS only */
+	SUPER_JOURNAL  =  0x00004000,  /* VFS only */
+	NOMUTEX        =  0x00008000,  /* Ok for sqlite3_open_v2() */
+	FULLMUTEX      =  0x00010000,  /* Ok for sqlite3_open_v2() */
+	SHAREDCACHE    =  0x00020000,  /* Ok for sqlite3_open_v2() */
+	PRIVATECACHE   =  0x00040000,  /* Ok for sqlite3_open_v2() */
+	WAL            =  0x00080000,  /* VFS only */
+	NOFOLLOW       =  0x01000000,  /* Ok for sqlite3_open_v2() */
+	EXRESCODE      =  0x02000000,  /* Extended result codes */
+}
+
 
 Bind_Callback :: proc "c" (rawptr) -> rawptr
 STATIC := transmute(Bind_Callback)i64(0)
@@ -116,6 +142,7 @@ foreign sqlite3 {
 	config :: proc(option: Config, #c_vararg args: ..any) -> Result ---
 
 	open :: proc(filename: cstring, ppDb: ^Connection) -> Result ---
+	open_v2 :: proc(filename: cstring, ppDb: ^Connection, flags: c.int, zVfs: cstring) -> Result ---
 	close :: proc(db: Connection) -> Result ---
 
 	prepare_v2 :: proc(db: Connection, zSql: cstring, nByte: c.int, ppStmt: ^Statement, pzTail: ^cstring) -> Result ---
