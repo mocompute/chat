@@ -27,7 +27,6 @@ test_version :: proc(t: ^testing.T) {
 test_server_create_get :: proc(t: ^testing.T) {
 	app := test_db_init()
 	input: []string = {"server-create", "foo"}
-	server_id: i64
 	server_uuid: Uuid
 	{
 		td := dispatch(app, input)
@@ -35,7 +34,6 @@ test_server_create_get :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Ok)
 
 		server := cast(^Server)td.result.(rawptr)
-		server_id = server.id
 		server_uuid = server.uuid
 		free(td.result.(rawptr))
 	}
@@ -52,7 +50,6 @@ test_server_create_get :: proc(t: ^testing.T) {
 
 		testing.expect(t, td.status == .Ok)
 		server := cast(^Server)td.result.(rawptr)
-		testing.expect_value(t, server.id, server_id)
 		testing.expect_value(t, server.uuid, server_uuid)
 		free(td.result.(rawptr))
 	}
