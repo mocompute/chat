@@ -18,8 +18,9 @@ Options :: struct {
 App :: struct {
 	command_pool: Task_Manager,
 	query_pool: Task_Manager,
-
 	task_thread_init: Task_Thread_Init,
+
+	config: Config,
 
 	tmp_dir: string,	// only used by tests
 }
@@ -34,6 +35,16 @@ app_deinit :: proc(^App) {
 app_open_db :: proc(self: ^App, db_path: string) {
 	db_path_c := strings.clone_to_cstring(db_path)
 	self.task_thread_init = {db_path=db_path_c}
+
+	{
+		conn, err := db_open_multi_threaded(db_path_c)
+		defer db_close(conn)
+
+		self.config, err = config_db_retrieve(conn)
+		if err != nil {
+			panic("fatal: unable to read configuration. Does the database exist?")
+		}
+	}
 
 	task_manager_init(&self.command_pool, 1, &self.task_thread_init)
 	task_manager_start(&self.command_pool)
@@ -79,7 +90,7 @@ fatal :: proc(message: string, exit := true) {
 
 // Caller must task_data_destroy the return value.
 _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Task_Data) {
-	command, query, err := words_to_action(words)
+	command, query, err := words_to_action(words, self)
 	if err == nil {
 		td = action_call(&self.command_pool, command, query, self)
 	} else {

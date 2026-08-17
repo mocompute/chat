@@ -8,7 +8,7 @@ Server :: struct {
 	name: string,
 }
 
-Server_Row  :: Db_Row_Spec{{"uuid", []u8}, {"name", cstring}}
+Server_Row :: Db_Row_Spec{{"uuid", []u8}, {"name", cstring}}
 Server_Cols :: "uuid, name"
 Server_Cols_N :: 2
 
@@ -101,14 +101,7 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 		{":name", self.name},
 	}) or_return
 	defer db_finalize(stmt)
-
-	err = sqlite3.step(stmt)
-	if err == sqlite3.Result.Done {
-		err = nil
-	} else if err == sqlite3.Result.Constraint {
-		err = .Exists
-	}
-	return
+	return db_insert_unique(stmt)
 }
 
 server_db_lookup_uuid :: proc(db: Db, uuid: Uuid) -> (self: Server, err: Db_Error) {

@@ -108,3 +108,14 @@ db_retrieve_one :: proc($T: typeid, stmt: sqlite3.Statement, construct: proc(sql
 	}
 	return
 }
+
+db_insert_unique :: proc(stmt: sqlite3.Statement) -> (err: Db_Error) {
+	err = sqlite3.step(stmt)
+
+	if err == sqlite3.Result.Done {
+		err = nil
+	} else if err == sqlite3.Result.Constraint {
+		err = .Exists
+	}
+	return
+}

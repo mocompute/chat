@@ -8,6 +8,7 @@ Database_Create :: struct {
 	path: string,
 }
 
+
 Server_Create :: struct {
 	name: string,
 }
@@ -19,9 +20,18 @@ Server_Lookup_Name :: struct {
 	name: string,
 }
 
+User_Create :: struct {
+	server: Uuid,
+	username: string,
+	password: string,
+	pepper: [PEPPER_BYTES]u8,
+}
+
+
 Command :: union {
 	Database_Create,
 	Server_Create,
+	User_Create,
 }
 
 Query :: union {
@@ -41,7 +51,7 @@ Action_Error :: enum {
 API_Item :: struct {
 	command_word: string,
 	arity: int,
-	constructor: proc([]string) -> (Command, Query, Action_Error),
+	constructor: proc([]string, ^App) -> (Command, Query, Action_Error),
 }
 
 DB_CREATE_COMMAND :: "db-create"
@@ -50,6 +60,7 @@ API :: [?]API_Item{
 	{"server-create", 1, mk_server_create},
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
+	{"user-create", 3, mk_user_create},
 	{"version", 0, mk_version_get},
 }
 
@@ -67,23 +78,23 @@ api_index_deinit :: proc() {
 	delete(api_index)
 	api_index = nil
 }
-mk_version_get :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+mk_version_get :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	query = Version_Get{}
 	return
 }
-mk_database_create :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+mk_database_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	command = Database_Create{path=words[1]}
 	return
 }
-mk_server_create :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+mk_server_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	command = Server_Create{name=words[1]}
 	return
 }
-mk_server_lookup_name :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+mk_server_lookup_name :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	query = Server_Lookup_Name{name=words[1]}
 	return
 }
-mk_server_lookup_uuid :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+mk_server_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	if uuid, ok := uuid_from_hex(words[1]); ok {
 		query = Server_Lookup_Uuid{uuid=uuid}
 	} else {
@@ -91,7 +102,27 @@ mk_server_lookup_uuid :: proc(words: []string) -> (command: Command, query: Quer
 	}
 	return
 }
-words_to_action :: proc(words: []string) -> (command: Command, query: Query, err: Action_Error) {
+mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	server := words[1]
+	username := words[2]
+	password := words[3]
+
+	uc := User_Create{username=username, password=password}
+
+	if uuid, ok := uuid_from_hex(server); ok {
+		uc.server = uuid
+	} else {
+		fmt.eprintfln("mk_user_create: uuid error: '%s'", server)
+		err = .Bad_Argument
+		return
+	}
+
+	copy(uc.pepper[:], app.config.pepper[:])
+
+	command = uc
+	return
+}
+words_to_action :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	if len(words) == 0 do return nil, nil, .Empty
 	assert(api_index != nil)
 
@@ -104,7 +135,7 @@ words_to_action :: proc(words: []string) -> (command: Command, query: Query, err
 
 	if api_item.arity != len(words) - 1 do return nil, nil, .Bad_Arity
 
-	return api_item.constructor(words)
+	return api_item.constructor(words, app)
 }
 
 action_error_to_string :: proc(error: Action_Error) -> (msg: string) {
@@ -128,6 +159,7 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 		switch _ in command {
 		case Database_Create: p = nil
 		case Server_Create:   p = server_create
+		case User_Create:     p = user_create
 		}
 
 	} else if query != nil {
