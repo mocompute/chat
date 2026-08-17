@@ -1,7 +1,7 @@
 package main
 
 import "core:crypto"
-import "../../lib/sqlite3"
+import "../../../../base/src/lib/sqlite3"
 @(require) import "core:fmt"
 
 PEPPER_BYTES :: 8

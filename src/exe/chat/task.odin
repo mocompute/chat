@@ -5,7 +5,7 @@ import "core:sync"
 import "core:thread"
 @(require) import "core:fmt"
 
-import "../../lib/sqlite3"
+import "../../../../base/src/lib/sqlite3"
 
 Task_Manager :: struct {
 	tickets: map[Uuid]Ticket,

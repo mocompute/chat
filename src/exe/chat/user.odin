@@ -1,6 +1,6 @@
 package main
 
-import "../../lib/sqlite3"
+import "../../../../base/src/lib/sqlite3"
 
 import "base:intrinsics"
 import "core:crypto"

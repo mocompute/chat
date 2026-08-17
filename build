@@ -35,7 +35,6 @@ check_options="-vet -strict-style -vet-tabs -warnings-as-errors"
 test_options="-define:ODIN_TEST_LOG_LEVEL=warning -define:ODIN_TEST_SHORT_LOGS=true -define:ODIN_TEST_THREADS=1"
 
 lib_dirs="
-	src/lib/sqlite3
 "
 
 exe_dirs="
