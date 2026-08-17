@@ -26,7 +26,7 @@ Task_Data :: struct {
 	query: Query,
 
 	result: union {
-		rawptr,
+		rawptr,		// will be freed by task_data_destroy
 		i64,
 	},
 
@@ -76,6 +76,9 @@ task_thread_fini :: proc(thread: ^thread.Thread, user_data: rawptr) {
 
 task_data_destroy :: proc(self: ^Task_Data) {
 	delete(self.message)
+	if v, ok := self.result.(rawptr); ok {
+		free(v)
+	}
 	free(self)
 }
 

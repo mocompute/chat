@@ -35,7 +35,6 @@ test_server_create_get :: proc(t: ^testing.T) {
 
 		server := cast(^Server)td.result.(rawptr)
 		server_uuid = server.uuid
-		free(td.result.(rawptr))
 	}
 	{
 		td := dispatch(app, input)
@@ -51,7 +50,6 @@ test_server_create_get :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Ok)
 		server := cast(^Server)td.result.(rawptr)
 		testing.expect_value(t, server.uuid, server_uuid)
-		free(td.result.(rawptr))
 	}
 	input = {"server-lookup-name", "nonexistent"}
 	{
@@ -68,7 +66,6 @@ test_server_create_get :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Ok)
 		server := cast(^Server)td.result.(rawptr)
 		testing.expect_value(t, server.uuid, server_uuid)
-		free(td.result.(rawptr))
 	}
 }
 
@@ -84,7 +81,6 @@ test_user_create :: proc(t: ^testing.T) {
 
 		server := cast(^Server)td.result.(rawptr)
 		server_uuid = server.uuid
-		free(td.result.(rawptr))
 	}
 
 	input = {"user-create", uuid_to_hex(server_uuid, context.temp_allocator), "bar", "baz"}
@@ -92,7 +88,6 @@ test_user_create :: proc(t: ^testing.T) {
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
-		free(td.result.(rawptr))
 	}
 }
 
