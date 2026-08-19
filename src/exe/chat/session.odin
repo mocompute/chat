@@ -41,9 +41,10 @@ session_manager_deinit :: proc(self: ^Session_Manager) {
 	lru.destroy(&self.cache, false)
 }
 
-session_manager_insert :: proc(self: ^Session_Manager, uuid: Uuid, session: Session) {
+session_manager_insert :: proc(self: ^Session_Manager, uuid: Uuid, session: Session) -> ^Session {
 	sync.mutex_guard(&self.mutex)
 	lru.set(&self.cache, uuid, session)
+	return lru.get_ptr(&self.cache, uuid)
 }
 
 session_manager_lookup :: proc(self: ^Session_Manager, uuid: Uuid) -> (session: Session, ok: bool) {
@@ -55,5 +56,30 @@ session_manager_lookup :: proc(self: ^Session_Manager, uuid: Uuid) -> (session: 
 session_manager_remove :: proc(self: ^Session_Manager, uuid: Uuid) -> (ok: bool) {
 	sync.mutex_guard(&self.mutex)
 	ok = lru.remove(&self.cache, uuid)
+	return
+}
+
+import "core:fmt"
+
+session_create :: proc(task: Task) {
+	task_data := task_to_task_data(task)
+	cmd := task_data.command.(Session_Create)
+
+	user, err := user_db_lookup_username(db_conn, cmd.server, cmd.username)
+	if err != nil {
+		fmt.eprintfln("user '%s' not found", cmd.username)
+		task_data.status = .Not_Found
+		return
+	}
+
+	if user_valid_password(user, cmd.password, cmd.pepper[:]) {
+		task_data.status = .Ok
+
+		session := Session{expires=unix_time() + SESSION_MAX_AGE}
+		uuid := uuid_v4()
+		task_data.result = session_manager_insert(cmd.session_manager, uuid, session)
+	} else {
+		task_data.status = .Conflict
+	}
 	return
 }

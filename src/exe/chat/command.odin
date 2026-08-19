@@ -43,16 +43,23 @@ Server_Lookup_Name :: struct {
 
 
 Session_Create :: struct {
+	server: Uuid,
 	username: string,
 	password: string,
 	result: ^Session,
+
+	pepper: [PEPPER_BYTES]u8,
+	session_manager: ^Session_Manager,
 }
 Session_Destroy :: struct {
 	uuid: Uuid,
+	session_manager: ^Session_Manager,
 }
 Session_Refresh :: struct {
 	uuid: Uuid,
 	result: ^Session,
+
+	session_manager: ^Session_Manager,
 }
 
 
@@ -62,6 +69,11 @@ User_Create :: struct {
 	username: string,
 	password: string,
 	pepper: [PEPPER_BYTES]u8,
+	result: ^User,
+}
+User_Lookup_Username :: struct {
+	server: Uuid,
+	username: string,
 	result: ^User,
 }
 
@@ -76,11 +88,13 @@ Version_Get :: struct {
 Command :: union {
 	Database_Create,
 	Server_Create,
+	Session_Create,
 	User_Create,
 }
 Query :: union {
 	Server_Lookup_Name,
 	Server_Lookup_Uuid,
+	User_Lookup_Username,
 	Version_Get,
 }
 Action_Error :: enum {
@@ -103,7 +117,9 @@ API :: [?]API_Item{
 	{"server-create", 1, mk_server_create},
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
+	{"session-create", 3, mk_session_create},
 	{"user-create", 3, mk_user_create},
+	{"user-lookup-username", 2, mk_user_lookup_username},
 	{"version", 0, mk_version_get},
 }
 
@@ -145,6 +161,24 @@ mk_server_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, 
 	}
 	return
 }
+mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	server := words[1]
+	username := words[2]
+	password := words[3]
+
+	sc := Session_Create{username=username, password=password}
+	copy(sc.pepper[:], app.config.pepper[:])
+	sc.session_manager = &app.session_manager
+
+	if uuid, ok := uuid_from_hex(server); ok {
+		sc.server = uuid
+	} else {
+		err = .Bad_Argument
+	}
+
+	command = sc
+	return
+}
 mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	server := words[1]
 	username := words[2]
@@ -165,6 +199,21 @@ mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: 
 	command = uc
 	return
 }
+mk_user_lookup_username :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	server := words[1]
+	username := words[2]
+	ulu := User_Lookup_Username{username=username}
+	if uuid, ok := uuid_from_hex(server); ok {
+		ulu.server = uuid
+	} else {
+		fmt.eprintfln("mk_user_lookup_username: uuid error: '%s'", server)
+		err = .Bad_Argument
+		return
+	}
+	query = ulu
+	return
+}
+
 words_to_action :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	if len(words) == 0 do return nil, nil, .Empty
 	assert(api_index != nil)
@@ -202,14 +251,16 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 		switch _ in command {
 		case Database_Create: p = nil
 		case Server_Create:   p = server_create
+		case Session_Create:  p = session_create
 		case User_Create:     p = user_create
 		}
 
 	} else if query != nil {
 		switch _ in query {
-		case Server_Lookup_Name:  p = server_lookup_name
-		case Server_Lookup_Uuid:  p = server_lookup_uuid
-		case Version_Get:         p = version_get
+		case Server_Lookup_Name:    p = server_lookup_name
+		case Server_Lookup_Uuid:    p = server_lookup_uuid
+		case User_Lookup_Username:  p = user_lookup_username
+		case Version_Get:           p = version_get
 		}
 
 	}

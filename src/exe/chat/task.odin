@@ -107,11 +107,10 @@ task_manager_deinit :: proc(self: ^Task_Manager) {
 }
 
 
-// `procedure` MUST check the callback, like this:
+// `procedure` MUST use `task_to_task_data` because it queues a required defer statement
 //
 //	foo :: proc(task: Task) {
-//		task_data := cast(^Task_Data) task.data
-//		defer if task_data.callback != nil do task_data.callback(task_data)
+//		task_data := task_to_task_data(task)
 //		// ...
 //	}
 task_manager_cast :: proc(self: ^Task_Manager, procedure: thread.Task_Proc, data: ^Task_Data, app: ^App, cb: Task_Callback = nil, cb_data: rawptr = nil) -> (id: Uuid) {

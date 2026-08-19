@@ -70,26 +70,44 @@ test_server_create_get :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_user_create :: proc(t: ^testing.T) {
+test_user_session_create :: proc(t: ^testing.T) {
 	app := test_db_init()
 	input: []string = {"server-create", "foo"}
-	server_uuid: Uuid
+	server_uuid: string
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
 
 		server := cast(^Server)td.result.(rawptr)
-		server_uuid = server.uuid
+		server_uuid = uuid_to_hex(server.uuid, context.temp_allocator)
 	}
 
-	input = {"user-create", uuid_to_hex(server_uuid, context.temp_allocator), "bar", "baz"}
+	input = {"user-create", server_uuid, "bar", "baz"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
+	}
+	input = {"user-lookup-username", server_uuid, "bar"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
+	}
+
+
+	input = {"session-create", server_uuid, "bar", "baz"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		_, ok := td.result.(rawptr)
+		testing.expect(t, ok)
 	}
 }
 

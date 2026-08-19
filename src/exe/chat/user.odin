@@ -5,6 +5,7 @@ import "../../../../base/src/lib/sqlite3"
 import "base:intrinsics"
 import "core:crypto"
 import "core:crypto/argon2id"
+import "core:strings"
 import "core:testing"
 
 SALT_BYTES :: argon2id.RECOMMENDED_SALT_SIZE
@@ -21,6 +22,18 @@ User :: struct {
 User_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"username", cstring}, {"hashed_password", []u8}, {"salt", []u8}}
 User_Cols :: "uuid, server, username, hashed_password, salt"
 User_Cols_N :: 5
+User_Create_Table :: `-- sql
+	CREATE TABLE IF NOT EXISTS user(
+	uuid      BLOB PRIMARY KEY,
+	server    BLOB NOT NULL REFERENCES server(uuid) ON DELETE CASCADE,
+	username  TEXT NOT NULL UNIQUE,
+	hashed_password BLOB NOT NULL,
+	salt      BLOB NOT NULL
+	) WITHOUT ROWID;
+	CREATE UNIQUE INDEX IF NOT EXISTS user_server_username ON user(
+	server, username
+	)
+	`
 
 user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
 	res: [User_Cols_N]Db_Value
@@ -33,7 +46,7 @@ user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
 	bs = res[1].([]u8)
 	copy(self.server[:], bs)
 
-	self.username = string(res[2].(cstring))
+	self.username = strings.clone_from_cstring(res[2].(cstring))
 
 	bs = res[3].([]u8)
 	copy(self.hashed_password[:], bs)
@@ -48,7 +61,7 @@ user_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(User_Create)
 
-	user, err := user_hash_create(cmd.username, cmd.password, cmd.pepper[:])
+	user, err := user_hash_create(cmd.server, cmd.username, cmd.password, cmd.pepper[:])
 	if err != nil {
 		task_data.status = .Runtime_Error
 		return
@@ -61,7 +74,26 @@ user_create :: proc(task: Task) {
 	}
 }
 
-user_hash_create :: proc(username, password: string, pepper: []u8) -> (user: User, err: Db_Error) {
+import "core:fmt"
+
+user_lookup_username :: proc(task: Task) {
+	task_data := task_to_task_data(task)
+	q := task_data.query.(User_Lookup_Username)
+
+	user, err := user_db_lookup_username(db_conn, q.server, q.username)
+	fmt.eprintfln("user_lookup_username: q.server = %v", q.server)
+	fmt.eprintfln("user_lookup_username: q.username = %v", q.username)
+	fmt.eprintfln("user_lookup_username: err = %v", err)
+
+	if !is_db_error(err, task_data) {
+		q.result = new_clone(user)
+		task_data.result = q.result
+	}
+	return
+}
+
+user_hash_create :: proc(server: Uuid, username, password: string, pepper: []u8) -> (user: User, err: Db_Error) {
+	user.server = server
 	user.username = username
 	crypto.rand_bytes(user.salt[:])
 
@@ -71,40 +103,36 @@ user_hash_create :: proc(username, password: string, pepper: []u8) -> (user: Use
 
 user_db_create :: proc(self: ^User, db: Db) -> (err: Db_Error) {
 	sql :: `-- sql
-	INSERT INTO user (uuid, server, username, password, salt)
-	VALUES(:uuid, :server, :username, :password, :salt);
+	INSERT INTO user (uuid, server, username, hashed_password, salt)
+	VALUES(:uuid, :server, :username, :hashed_password, :salt);
 	`
 	stmt := db_prepare_bind(db, sql, {
 		{":uuid", self.uuid[:]},
 		{":server", self.server[:]},
 		{":username", self.username},
-		{":password", self.hashed_password[:]},
+		{":hashed_password", self.hashed_password[:]},
 		{":salt", self.salt[:]},
 	}) or_return
 	defer db_finalize(stmt)
 	return db_insert_unique(stmt)
 }
 
-user_db_lookup_username :: proc(db: Db, username: string) -> (self: User, err: Db_Error) {
-	sql :: `SELECT ` + User_Cols + ` FROM user WHERE username = :username;`
+user_db_lookup_username :: proc(db: Db, server: Uuid, username: string) -> (self: User, err: Db_Error) {
+	server := server
+	sql :: `SELECT ` + User_Cols + ` FROM user WHERE server = :server AND username = :username;`
 
-	stmt := db_prepare_bind(db, sql, {{":username", username}}) or_return
+	stmt := db_prepare_bind(db, sql, {
+		{":server", server[:]},
+		{":username", username},
+	}) or_return
 	defer db_finalize(stmt)
+
 	self = db_retrieve_one(User, stmt, user_from_row) or_return
 	return
 }
 
 user_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	sql :: `-- sql
-	CREATE TABLE IF NOT EXISTS user(
-	uuid BLOB PRIMARY KEY,
-	server BLOB NOT NULL,
-	username TEXT NOT NULL UNIQUE,
-	password BLOB NOT NULL,
-	salt BLOB NOT NULL
-	) WITHOUT ROWID;
-	`
-	err = db_exec_multi_null(db, sql)
+	err = db_exec_multi_null(db, User_Create_Table)
 	return
 }
 
@@ -118,7 +146,8 @@ user_valid_password :: proc(self: User, test_password: string, pepper: []u8) -> 
 
 @(test)
 test_password :: proc(t: ^testing.T) {
-	user, err := user_hash_create("foo", "bar", {1,2,3,4})
+	server := uuid_v7()
+	user, err := user_hash_create(server, "foo", "bar", {1,2,3,4})
 	testing.expect(t, err == nil)
 
 	testing.expect_value(t, true, user_valid_password(user, "bar", {1,2,3,4}))

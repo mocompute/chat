@@ -7,6 +7,7 @@ import "core:reflect"
 import "core:strings"
 
 DEFAULT_DB_PATH :: "chat.db"
+MAX_SESSIONS :: 1_000_000
 
 Options :: struct {
 	db: string `usage:"Path to db file (default: ./chat.db)"`,
@@ -18,10 +19,11 @@ Options :: struct {
 App :: struct {
 	command_pool: Task_Manager,
 	query_pool: Task_Manager,
-	task_thread_init: Task_Thread_Init,
+	session_manager: Session_Manager,
 
 	config: Config,
 
+	task_thread_init: Task_Thread_Init,
 	tmp_dir: string,	// only used by tests
 }
 
@@ -46,6 +48,8 @@ app_open_db :: proc(self: ^App, db_path: string) {
 		}
 	}
 
+	session_manager_init(&self.session_manager, MAX_SESSIONS, context.allocator)
+
 	task_manager_init(&self.command_pool, 1, &self.task_thread_init)
 	task_manager_start(&self.command_pool)
 
@@ -60,6 +64,8 @@ app_close_db :: proc(self: ^App) {
 
 	task_manager_deinit(&self.command_pool)
 	task_manager_deinit(&self.query_pool)
+
+	session_manager_deinit(&self.session_manager)
 
 	delete(self.task_thread_init.db_path)
 	fmt.eprintln("app_close_db: draining task pools done.")
