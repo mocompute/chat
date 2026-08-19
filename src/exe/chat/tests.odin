@@ -88,6 +88,8 @@ test_user_create :: proc(t: ^testing.T) {
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
 	}
 }
 
