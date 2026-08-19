@@ -1,0 +1,56 @@
+package main
+
+import "core:container/lru"
+import "core:mem"
+import "core:sync"
+
+/*
+
+Session Management
+
+A Session represents an authenticated user. Any bearer of the session token (a Uuid) is
+considered acting on behalf of the authenticated user. This means the transport layer
+must be secure, and the token must be stored by the client securely, e.g. in a Secure
+cookie, not localStorage.
+
+The Session Manager is an LRU cache, configured with a maximum number of sessions to
+store in memory.
+
+*/
+
+Session :: struct {
+
+}
+
+Session_Manager :: struct {
+	cache: lru.Cache(Uuid, Session),
+	mutex: sync.Mutex,
+
+}
+
+session_manager_init :: proc(self: ^Session_Manager, max_sessions: int, allocator: mem.Allocator) {
+	sync.mutex_guard(&self.mutex)
+	lru.init(&self.cache, max_sessions, allocator, allocator)
+}
+
+session_manager_deinit :: proc(self: ^Session_Manager) {
+	sync.mutex_guard(&self.mutex)
+	lru.destroy(&self.cache, false)
+}
+
+session_manager_insert :: proc(self: ^Session_Manager, uuid: Uuid, session: Session) {
+	sync.mutex_guard(&self.mutex)
+	lru.set(&self.cache, uuid, session)
+}
+
+session_manager_lookup :: proc(self: ^Session_Manager, uuid: Uuid) -> (session: Session, ok: bool) {
+	sync.mutex_guard(&self.mutex)
+	session, ok = lru.get(&self.cache, uuid)
+	return
+}
+
+session_manager_remove :: proc(self: ^Session_Manager, uuid: Uuid) -> (ok: bool) {
+	sync.mutex_guard(&self.mutex)
+	ok = lru.remove(&self.cache, uuid)
+	return
+}
