@@ -21,10 +21,11 @@ the command processor.
 
 */
 
-
 Database_Create :: struct {
 	path: string,
 }
+
+
 
 Server_Create :: struct {
 	name: string,
@@ -39,6 +40,23 @@ Server_Lookup_Name :: struct {
 	result: ^Server,
 }
 
+
+
+Session_Create :: struct {
+	username: string,
+	password: string,
+	result: ^Session,
+}
+Session_Destroy :: struct {
+	uuid: Uuid,
+}
+Session_Refresh :: struct {
+	uuid: Uuid,
+	result: ^Session,
+}
+
+
+
 User_Create :: struct {
 	server: Uuid,
 	username: string,
@@ -47,9 +65,13 @@ User_Create :: struct {
 	result: ^User,
 }
 
+
+
 Version_Get :: struct {
 	result: i32,
 }
+
+
 
 Command :: union {
 	Database_Create,

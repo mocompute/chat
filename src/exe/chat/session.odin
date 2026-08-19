@@ -13,19 +13,22 @@ considered acting on behalf of the authenticated user. This means the transport 
 must be secure, and the token must be stored by the client securely, e.g. in a Secure
 cookie, not localStorage.
 
+A Session token is invalid after a certain time.
+
 The Session Manager is an LRU cache, configured with a maximum number of sessions to
 store in memory.
 
 */
 
-Session :: struct {
+SESSION_MAX_AGE :: 900		// 15 minutes
 
+Session :: struct {
+	expires: i64,
 }
 
 Session_Manager :: struct {
 	cache: lru.Cache(Uuid, Session),
 	mutex: sync.Mutex,
-
 }
 
 session_manager_init :: proc(self: ^Session_Manager, max_sessions: int, allocator: mem.Allocator) {
