@@ -24,7 +24,7 @@ version_get :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	query := task_data.query.(Version_Get)
 
-	config, err := config_db_retrieve(db_conn)
+	config, err := config_db_retrieve(tl_db_conn)
 	if !is_db_error(err, task_data) {
 		query.result = config.version
 		task_data.result = i64(query.result)

@@ -55,7 +55,7 @@ Task_Proc :: thread.Task_Proc
 Task_Callback :: #type proc(^Task_Data, rawptr)
 
 // SQLite3 per-thread connection
-@(thread_local) db_conn: sqlite3.Connection
+@(thread_local) tl_db_conn: sqlite3.Connection
 
 Task_Thread_Init :: struct {
 	db_path: cstring,
@@ -65,13 +65,13 @@ task_thread_init :: proc(thread: ^thread.Thread, user_data: rawptr) {
 	ctx := cast(^Task_Thread_Init) user_data
 	db, err := db_open_multi_threaded(ctx.db_path)
 	if err == nil {
-		db_conn = db
+		tl_db_conn = db
 	}
 }
 
 task_thread_fini :: proc(thread: ^thread.Thread, user_data: rawptr) {
-	if db_conn != nil {
-		db_close(db_conn)
+	if tl_db_conn != nil {
+		db_close(tl_db_conn)
 	}
 }
 

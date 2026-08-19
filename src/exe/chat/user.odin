@@ -73,7 +73,7 @@ user_create :: proc(task: Task) {
 		task_data.status = .Runtime_Error
 		return
 	}
-	err = user_db_create(&user, db_conn)
+	err = user_db_create(&user, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
 		user2 := new_clone(user)
@@ -89,7 +89,7 @@ user_lookup_username :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.query.(User_Lookup_Username)
 
-	user, err := user_db_lookup_username(db_conn, q.server, q.username)
+	user, err := user_db_lookup_username(tl_db_conn, q.server, q.username)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(user)

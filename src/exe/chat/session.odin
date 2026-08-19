@@ -62,7 +62,7 @@ session_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(Session_Create)
 
-	user, err := user_db_lookup_username(db_conn, cmd.server, cmd.username)
+	user, err := user_db_lookup_username(tl_db_conn, cmd.server, cmd.username)
 	defer user_deinit(&user)
 	if err != nil {
 		task_data.status = .Not_Found
