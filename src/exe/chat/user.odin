@@ -57,7 +57,8 @@ user_create :: proc(task: Task) {
 	err = user_db_create(&user, db_conn)
 
 	if !is_db_error(err, task_data) {
-		task_data.result = new_clone(user)
+		cmd.result = new_clone(user)
+		task_data.result = cmd.result
 	}
 }
 

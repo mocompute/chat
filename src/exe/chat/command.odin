@@ -2,22 +2,41 @@ package main
 
 import "core:fmt"
 
-Version_Get :: struct {}
+/*
+
+Commands and Queries
+
+  Commands are processed by a single worker thread to write to the database. Queries are
+  processed by a worker pool. All Commands and Queries return a result code in
+  Task_Data.status which should be checked by the client before attempting to use the
+  optional result value.
+
+  Commands and Queries are collectively called 'Actions'. Actions may be cast or called.
+  cast returns immediately. The Action will invoke a callback, if any was configured.
+  call will queue the Action to the worker pool (or single thread for Command) and will
+  busy-wait until the action is complete, then return to the caller.
+
+  Lifetimes: task results which are placed in Task_Data.result.(rawptr) will be freed by
+  the command processor.
+
+*/
+
 
 Database_Create :: struct {
 	path: string,
 }
 
-
 Server_Create :: struct {
 	name: string,
+	result: ^Server,
 }
-
 Server_Lookup_Uuid :: struct {
 	uuid: Uuid,
+	result: ^Server,
 }
 Server_Lookup_Name :: struct {
 	name: string,
+	result: ^Server,
 }
 
 User_Create :: struct {
@@ -25,21 +44,23 @@ User_Create :: struct {
 	username: string,
 	password: string,
 	pepper: [PEPPER_BYTES]u8,
+	result: ^User,
 }
 
+Version_Get :: struct {
+	result: i32,
+}
 
 Command :: union {
 	Database_Create,
 	Server_Create,
 	User_Create,
 }
-
 Query :: union {
 	Server_Lookup_Name,
 	Server_Lookup_Uuid,
 	Version_Get,
 }
-
 Action_Error :: enum {
 	None,
 	Not_Found,

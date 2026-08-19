@@ -52,7 +52,8 @@ server_create :: proc(task: Task) {
 	server := Server{name=cmd.name, uuid=uuid_v7()}
 	err := server_db_create(&server, db_conn)
 	if !is_db_error(err, task_data) {
-		task_data.result = new_clone(server)
+		cmd.result = new_clone(server)
+		task_data.result = cmd.result
 	}
 }
 
@@ -63,7 +64,8 @@ server_lookup_uuid :: proc(task: Task) {
 
 	server, err := server_db_lookup_uuid(db_conn, q.uuid)
 	if !is_db_error(err, task_data) {
-		task_data.result = new_clone(server)
+		q.result = new_clone(server)
+		task_data.result = q.result
 	}
 }
 
@@ -74,7 +76,8 @@ server_lookup_name :: proc(task: Task) {
 
 	server, err := server_db_lookup_name(db_conn, q.name)
 	if !is_db_error(err, task_data) {
-		task_data.result = new_clone(server)
+		q.result = new_clone(server)
+		task_data.result = q.result
 	}
 }
 
