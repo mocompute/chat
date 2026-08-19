@@ -6,18 +6,18 @@ import "core:fmt"
 
 Commands and Queries
 
-  Commands are processed by a single worker thread to write to the database. Queries are
-  processed by a worker pool. All Commands and Queries return a result code in
-  Task_Data.status which should be checked by the client before attempting to use the
-  optional result value.
+Commands are processed by a single worker thread to write to the database. Queries are
+processed by a worker pool. All Commands and Queries return a result code in
+Task_Data.status which should be checked by the client before attempting to use the
+optional result value.
 
-  Commands and Queries are collectively called 'Actions'. Actions may be cast or called.
-  cast returns immediately. The Action will invoke a callback, if any was configured.
-  call will queue the Action to the worker pool (or single thread for Command) and will
-  busy-wait until the action is complete, then return to the caller.
+Commands and Queries are collectively called 'Actions'. Actions may be cast or called.
+cast returns immediately. The Action will invoke a callback, if any was configured.
+call will queue the Action to the worker pool (or single thread for Command) and will
+busy-wait until the action is complete, then return to the caller.
 
-  Lifetimes: task results which are placed in Task_Data.result.(rawptr) will be freed by
-  the command processor.
+Lifetimes: task results which are placed in Task_Data.result.(rawptr) will be freed by
+the command processor.
 
 */
 
