@@ -21,9 +21,8 @@ config_create :: proc() -> (self: Config) {
 }
 
 version_get :: proc(task: Task) {
-	task_data := cast(^Task_Data) task.data
+	task_data := task_to_task_data(task)
 	query := task_data.query.(Version_Get)
-	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
 	config, err := config_db_retrieve(db_conn)
 	if !is_db_error(err, task_data) {

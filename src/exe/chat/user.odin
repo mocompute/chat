@@ -45,9 +45,8 @@ user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
 }
 
 user_create :: proc(task: Task) {
-	task_data := cast(^Task_Data) task.data
+	task_data := task_to_task_data(task)
 	cmd := task_data.command.(User_Create)
-	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
 	user, err := user_hash_create(cmd.username, cmd.password, cmd.pepper[:])
 	if err != nil {

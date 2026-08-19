@@ -190,3 +190,14 @@ task_manager_remove_task :: proc(self: ^Task_Manager, id: Uuid) {
 		delete_key(&self.tickets, id)
 	}
 }
+
+
+@(deferred_out=deferred_task_data_callback)
+task_to_task_data :: proc(task: Task) -> (td: ^Task_Data) {
+	td = cast(^Task_Data) task.data
+	return
+}
+
+deferred_task_data_callback :: proc(td: ^Task_Data) {
+	if td.callback != nil do td.callback(td, td.callback_data)
+}

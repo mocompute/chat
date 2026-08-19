@@ -45,9 +45,8 @@ is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (
 }
 
 server_create :: proc(task: Task) {
-	task_data := cast(^Task_Data) task.data
+	task_data := task_to_task_data(task)
 	cmd := task_data.command.(Server_Create)
-	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
 	server := Server{name=cmd.name, uuid=uuid_v7()}
 	err := server_db_create(&server, db_conn)
@@ -58,9 +57,8 @@ server_create :: proc(task: Task) {
 }
 
 server_lookup_uuid :: proc(task: Task) {
-	task_data := cast(^Task_Data) task.data
+	task_data := task_to_task_data(task)
 	q := task_data.query.(Server_Lookup_Uuid)
-	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
 	server, err := server_db_lookup_uuid(db_conn, q.uuid)
 	if !is_db_error(err, task_data) {
@@ -70,9 +68,8 @@ server_lookup_uuid :: proc(task: Task) {
 }
 
 server_lookup_name :: proc(task: Task) {
-	task_data := cast(^Task_Data) task.data
+	task_data := task_to_task_data(task)
 	q := task_data.query.(Server_Lookup_Name)
-	defer if task_data.callback != nil do task_data.callback(task_data, task_data.callback_data)
 
 	server, err := server_db_lookup_name(db_conn, q.name)
 	if !is_db_error(err, task_data) {
