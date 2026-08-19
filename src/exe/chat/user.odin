@@ -57,6 +57,13 @@ user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
 	return
 }
 
+user_deinit :: proc(self: ^User) {
+	delete(self.username)
+}
+user_deinit_rawptr :: proc(self: rawptr) {
+	user_deinit(cast(^User)self)
+}
+
 user_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(User_Create)
@@ -69,25 +76,26 @@ user_create :: proc(task: Task) {
 	err = user_db_create(&user, db_conn)
 
 	if !is_db_error(err, task_data) {
-		cmd.result = new_clone(user)
+		user2 := new_clone(user)
+		user2.username = strings.clone(user2.username)
+		cmd.result = user2
+
 		task_data.result = cmd.result
+		task_data.result_destruct = user_deinit_rawptr
 	}
 }
-
-import "core:fmt"
 
 user_lookup_username :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.query.(User_Lookup_Username)
 
 	user, err := user_db_lookup_username(db_conn, q.server, q.username)
-	fmt.eprintfln("user_lookup_username: q.server = %v", q.server)
-	fmt.eprintfln("user_lookup_username: q.username = %v", q.username)
-	fmt.eprintfln("user_lookup_username: err = %v", err)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(user)
+
 		task_data.result = q.result
+		task_data.result_destruct = user_deinit_rawptr
 	}
 	return
 }

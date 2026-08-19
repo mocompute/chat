@@ -41,10 +41,9 @@ session_manager_deinit :: proc(self: ^Session_Manager) {
 	lru.destroy(&self.cache, false)
 }
 
-session_manager_insert :: proc(self: ^Session_Manager, uuid: Uuid, session: Session) -> ^Session {
+session_manager_insert :: proc(self: ^Session_Manager, uuid: Uuid, session: Session) {
 	sync.mutex_guard(&self.mutex)
 	lru.set(&self.cache, uuid, session)
-	return lru.get_ptr(&self.cache, uuid)
 }
 
 session_manager_lookup :: proc(self: ^Session_Manager, uuid: Uuid) -> (session: Session, ok: bool) {
@@ -66,6 +65,7 @@ session_create :: proc(task: Task) {
 	cmd := task_data.command.(Session_Create)
 
 	user, err := user_db_lookup_username(db_conn, cmd.server, cmd.username)
+	defer user_deinit(&user)
 	if err != nil {
 		fmt.eprintfln("user '%s' not found", cmd.username)
 		task_data.status = .Not_Found
@@ -77,7 +77,8 @@ session_create :: proc(task: Task) {
 
 		session := Session{expires=unix_time() + SESSION_MAX_AGE}
 		uuid := uuid_v4()
-		task_data.result = session_manager_insert(cmd.session_manager, uuid, session)
+		session_manager_insert(cmd.session_manager, uuid, session)
+		task_data.result = cast(rawptr) new_clone(uuid)
 	} else {
 		task_data.status = .Conflict
 	}

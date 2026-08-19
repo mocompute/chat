@@ -100,7 +100,6 @@ test_user_session_create :: proc(t: ^testing.T) {
 		testing.expect_value(t, user.username, "bar")
 	}
 
-
 	input = {"session-create", server_uuid, "bar", "baz"}
 	{
 		td := dispatch(app, input)

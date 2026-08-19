@@ -29,6 +29,7 @@ Task_Data :: struct {
 		rawptr,		// will be freed by task_data_destroy
 		i64,
 	},
+	result_destruct: proc(rawptr), // called before free of result.rawptr
 
 	message: string,
 	status: enum {
@@ -77,6 +78,9 @@ task_thread_fini :: proc(thread: ^thread.Thread, user_data: rawptr) {
 task_data_destroy :: proc(self: ^Task_Data) {
 	delete(self.message)
 	if v, ok := self.result.(rawptr); ok {
+		if self.result_destruct != nil {
+			self.result_destruct(v)
+		}
 		free(v)
 	}
 	free(self)
