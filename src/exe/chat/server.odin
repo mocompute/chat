@@ -84,7 +84,7 @@ server_lookup_name :: proc(task: Task) {
 server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 	// Although UUIDs must be unique, we assume generation will never generate a
 	// duplicate, so we avoid a SQL index.
-	sql: cstring: `-- sql
+	sql :: `-- sql
 	CREATE TABLE IF NOT EXISTS server(
 	uuid BLOB PRIMARY KEY,
 	name TEXT NOT NULL UNIQUE
@@ -95,7 +95,7 @@ server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 }
 
 server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
-	sql: cstring: `-- sql
+	sql :: `-- sql
 	INSERT INTO server (uuid, name)
 	VALUES (:uuid, :name);
 	`
@@ -109,7 +109,7 @@ server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
 
 server_db_lookup_uuid :: proc(db: Db, uuid: Uuid) -> (self: Server, err: Db_Error) {
 	uuid := uuid
-	sql: cstring: `SELECT ` + Server_Cols + ` FROM server WHERE uuid = :uuid`
+	sql :: `SELECT ` + Server_Cols + ` FROM server WHERE uuid = :uuid`
 	stmt := db_prepare_bind(db, sql, {
 		{":uuid", uuid[:]},
 	}) or_return
@@ -119,7 +119,7 @@ server_db_lookup_uuid :: proc(db: Db, uuid: Uuid) -> (self: Server, err: Db_Erro
 }
 
 server_db_lookup_name :: proc(db: Db, name: string) -> (self: Server, err: Db_Error) {
-	sql: cstring: `SELECT ` + Server_Cols + ` FROM server WHERE name = :name`
+	sql :: `SELECT ` + Server_Cols + ` FROM server WHERE name = :name`
 	stmt := db_prepare_bind(db, sql, {
 		{":name", name},
 	}) or_return

@@ -36,7 +36,7 @@ config_db_create :: proc(self: ^Config, db: Db) -> (err: Db_Error) {
 	_, err = config_db_retrieve(db)
 	if err == nil do return
 
-	sql: cstring: `-- sql
+	sql :: `-- sql
 	INSERT OR IGNORE INTO config(id, version, pepper)
 	VALUES(:id, :version, :pepper);
 	`
@@ -54,7 +54,7 @@ config_db_create :: proc(self: ^Config, db: Db) -> (err: Db_Error) {
 }
 
 config_db_retrieve :: proc(db: Db) -> (self: Config, err: Db_Error) {
-	sql: cstring: `-- sql
+	sql :: `-- sql
 	SELECT version, pepper FROM config WHERE id = 1;
 	`
 	row := Db_Row_Spec{{"version", i64}, {"pepper", []u8},}
@@ -75,7 +75,7 @@ config_db_retrieve :: proc(db: Db) -> (self: Config, err: Db_Error) {
 }
 
 config_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	sql: cstring: `-- sql
+	sql :: `-- sql
 	CREATE TABLE IF NOT EXISTS config(
 	id INTEGER PRIMARY KEY,
 	version INTEGER,
