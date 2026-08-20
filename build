@@ -103,6 +103,9 @@ build_sqlite3()
 	# https://sqlite.org/compile.html#recommended_compile_time_options
 	# Exceptions:
 	#  - THREADSAFE=2 https://sqlite.org/threadsafe.html
+	#  - DEFAULT_FOREIGN_KEYS=1
+	#  - ENABLE_API_ARMOR: intended to catch development bugs earlier
+
 
 	sqlite_options="
 	-DSQLITE_DQS=0
@@ -118,6 +121,7 @@ build_sqlite3()
 	-DSQLITE_OMIT_AUTOINIT
 	-DSQLITE_STRICT_SUBTYPE=1
 	-DSQLITE_DEFAULT_FOREIGN_KEYS=1
+	-DSQLITE_ENABLE_API_ARMOR
 	"
 	cwd=$(pwd)
 	cd src/vendor/sqlite3/sqlite-amalgamation-3530400
