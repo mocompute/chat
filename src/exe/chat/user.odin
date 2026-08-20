@@ -178,7 +178,7 @@ user_db_lookup_uuid :: proc(db: Db, server: Uuid, user: Uuid, allocator := conte
 }
 
 user_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	err = db_exec_multi_null(db, User_Create_Table)
+	err = db_exec(db, User_Create_Table)
 	return
 }
 

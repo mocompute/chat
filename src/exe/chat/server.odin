@@ -105,7 +105,7 @@ server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 	name TEXT NOT NULL UNIQUE
 	) WITHOUT ROWID;
 	`
-	err = db_exec_null(db, sql)
+	err = db_exec(db, sql)
 	return
 }
 

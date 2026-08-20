@@ -70,7 +70,7 @@ channel_create :: proc(task: Task) {
 }
 
 channel_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	err = db_exec_multi_null(db, Channel_Create_Table)
+	err = db_exec(db, Channel_Create_Table)
 	assert(err == nil)
 	return
 }

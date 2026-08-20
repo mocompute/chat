@@ -82,6 +82,6 @@ config_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 	version INTEGER,
 	pepper BLOB
 	);`
-	err = db_exec_multi_null(db, sql)
+	err = db_exec(db, sql)
 	return
 }
