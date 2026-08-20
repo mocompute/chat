@@ -12,6 +12,25 @@ Config :: struct {
 	version: i32,
 	pepper: [PEPPER_BYTES]u8,
 }
+Config_Row :: Db_Row_Spec{{"version", i64}, {"pepper", []u8}}
+Config_Cols :: "version, pepper"
+Config_Cols_N :: 2
+Config_Create_Table :: `-- sql
+	CREATE TABLE IF NOT EXISTS config(
+	id INTEGER PRIMARY KEY,
+	version INTEGER,
+	pepper BLOB);`
+
+config_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: Config, err: Db_Error) {
+	res: [Config_Cols_N]Db_Value
+	db_get_columns(stmt, Config_Row, res[:]) or_return
+	self.version = i32(res[0].(i64))
+
+	bs: []u8
+	bs = res[1].([]u8)
+	copy_exact(self.pepper[:], bs)
+	return
+}
 
 config_create :: proc() -> (self: Config) {
 	self.id = 1
@@ -52,35 +71,17 @@ config_db_create :: proc(self: ^Config, db: Db) -> (err: Db_Error) {
 	return
 }
 
-config_db_retrieve :: proc(db: Db) -> (self: Config, err: Db_Error) {
-	sql :: `-- sql
-	SELECT version, pepper FROM config WHERE id = 1;
-	`
-	row := Db_Row_Spec{{"version", i64}, {"pepper", []u8},}
-	res : [2]Db_Value
+config_db_retrieve :: proc(db: Db, allocator := context.allocator) -> (self: Config, err: Db_Error) {
+	sql :: `SELECT ` + Config_Cols + ` FROM config WHERE id = 1;`
 
-	stmt := db_prepare(db, sql) or_return
+	stmt := db_prepare_bind(db, sql, {}) or_return
 	defer db_finalize(stmt)
 
-	err = db_step(stmt)
-	if err == sqlite3.Result.Row {
-		db_get_columns(stmt, row, res[:]) or_return
-
-		self.version = cast(i32) res[0].(i64)
-		pepper := res[1].([]u8)
-		copy_exact(self.pepper[:], pepper)
-		err = nil
-	}
+	self = db_retrieve_one(Config, stmt, config_from_row, allocator) or_return
 	return
 }
 
 config_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	sql :: `-- sql
-	CREATE TABLE IF NOT EXISTS config(
-	id INTEGER PRIMARY KEY,
-	version INTEGER,
-	pepper BLOB
-	);`
-	err = db_exec(db, sql)
+	err = db_exec(db, Config_Create_Table)
 	return
 }
