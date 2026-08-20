@@ -34,7 +34,12 @@ Db_Statement_Callback :: proc(sqlite3.Statement)
 
 @(require_results)
 db_open_flags :: proc(filename: cstring, flags: c.int) -> (db: Db, err: Db_Error) {
-	rc := sqlite3.open_v2(filename, &db, flags, transmute(cstring)c.NULL)
+	rc := sqlite3.initialize()
+	if rc != .Ok {
+		return nil, rc
+	}
+
+	rc = sqlite3.open_v2(filename, &db, flags, transmute(cstring)c.NULL)
 	if rc != .Ok {
 		return nil, rc
 	}
@@ -70,7 +75,11 @@ db_open_multi_threaded :: proc(filename: cstring) -> (db: Db, err: Db_Error) {
 db_open_memory :: proc() -> (db: Db, err: Db_Error) {
 	path: cstring: ":memory:"
 
-	rc := sqlite3.open(path, &db)
+	rc := sqlite3.initialize()
+	if rc != .Ok {
+		return nil, rc
+	}
+	rc = sqlite3.open(path, &db)
 	if rc != .Ok {
 		return nil, rc
 	}
