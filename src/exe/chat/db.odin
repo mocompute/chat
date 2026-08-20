@@ -35,7 +35,11 @@ Db_Statement_Callback :: proc(sqlite3.Statement)
 db_open_flags :: proc(filename: cstring, flags: c.int) -> (db: Db, err: Db_Error) {
 	using sqlite3
 
-	open_v2(filename, &db, flags, transmute(cstring)c.NULL) or_return
+	rc := open_v2(filename, &db, flags, transmute(cstring)c.NULL)
+	if rc != .Ok {
+		return nil, rc
+	}
+
 	sql :: `-- sql
 	PRAGMA foreign_keys = ON;
 	PRAGMA journal_mode = WAL;`
@@ -64,7 +68,10 @@ db_open_memory :: proc() -> (db: Db, err: Db_Error) {
 	using sqlite3
 	path: cstring: ":memory:"
 
-	open(path, &db) or_return
+	rc := open(path, &db)
+	if rc != .Ok {
+		return nil, rc
+	}
 	sql :: `-- sql
 	PRAGMA foreign_keys = ON;`
 	err = db_exec_multi(db, sql)
@@ -79,7 +86,10 @@ db_close :: proc(db: Db) -> (err: Db_Error) {
 	if err != nil {
 		fmt.eprintfln("error: error before closing database: %s", err)
 	}
-	sqlite3.close(db) or_return
+	rc := sqlite3.close(db)
+	if rc != .Ok {
+		return rc
+	}
 	return
 }
 
@@ -97,37 +107,37 @@ db_finalize :: proc(stmt: sqlite3.Statement) {
 }
 
 db_exec_null :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db_Error) {
-	using sqlite3
-
-	stmt: Statement
+	stmt: sqlite3.Statement
 	stmt, err = db_prepare(db, sql)
 	if stmt == nil {
 		fmt.eprintfln("error: expected sql: '%s'", sql)
 	}
 	ensure(stmt != nil, loc=loc)
-	defer finalize(stmt)
+	defer sqlite3.finalize(stmt)
 
-	err = step(stmt)
+	ensure(err == nil, loc=loc)
+
+	err = sqlite3.step(stmt)
 	if err != .Done do return .Expected_Null_Return
 	err = nil
 	return
 }
 
 db_exec_multi_null :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db_Error) {
-	using sqlite3
-
 	tail := sql
 
 	for (cast([^]u8) tail)[0] != 0 {
-		stmt: Statement
-		err = prepare_v2(db, tail, -1, &stmt, &tail)
-		if stmt == nil {
+		stmt: sqlite3.Statement
+		err = sqlite3.prepare_v2(db, tail, -1, &stmt, &tail)
+		if stmt == nil || err != nil {
 			fmt.eprintfln("error: expected sql: '%s'", sql)
 		}
 		ensure(stmt != nil, loc=loc)
-		defer finalize(stmt)
+		defer sqlite3.finalize(stmt)
 
-		err = step(stmt)
+		ensure(err == nil, loc=loc)
+
+		err = sqlite3.step(stmt)
 		if err != .Done {
 			fmt.eprintfln("error: expected null: '%s', got %s", sql, err)
 			return .Expected_Null_Return
@@ -138,20 +148,20 @@ db_exec_multi_null :: proc(db: Db, sql: cstring, loc := #caller_location) -> (er
 }
 
 db_exec_multi :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db_Error) {
-	using sqlite3
-
 	tail := sql
 
 	for (cast([^]u8) tail)[0] != 0 {
-		stmt: Statement
-		err = prepare_v2(db, tail, -1, &stmt, &tail)
-		if stmt == nil {
+		stmt: sqlite3.Statement
+		err = sqlite3.prepare_v2(db, tail, -1, &stmt, &tail)
+		if stmt == nil || err != nil {
 			fmt.eprintfln("error: expected sql: '%s'", sql)
 		}
 		ensure(stmt != nil, loc=loc)
-		defer finalize(stmt)
+		defer sqlite3.finalize(stmt)
 
-		err = step(stmt)
+		ensure(err == nil, loc=loc)
+
+		err = sqlite3.step(stmt)
 		if err != .Done && err != .Row {
 			fmt.eprintfln("error: '%s', got %s", sql, err)
 			return
@@ -162,31 +172,32 @@ db_exec_multi :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db
 }
 
 db_exec_one_row :: proc(db: Db, sql: cstring, cb: Db_Statement_Callback, loc := #caller_location) -> (err: Db_Error) {
-	using sqlite3
-
-	stmt: Statement
+	stmt: sqlite3.Statement
 	stmt, err = db_prepare(db, sql)
-	if stmt == nil {
+	if stmt == nil || err != nil {
 		fmt.eprintfln("error: expected sql: '%s'", sql)
 	}
 	ensure(stmt != nil, loc=loc)
-	defer finalize(stmt)
+	defer sqlite3.finalize(stmt)
 
+	ensure(err == nil, loc=loc)
 
-	err = step(stmt)
+	err = sqlite3.step(stmt)
 	if err != .Row do return .Expected_Row
 
 	cb(stmt)
 
-	err = step(stmt)
+	err = sqlite3.step(stmt)
 	if err != .Done do return .Unexpected_Row
+	err = nil
 
 	return
 }
 
 db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	config_db_create_tables(db)
-	server_db_create_tables(db)
-	user_db_create_tables(db)
+	config_db_create_tables(db) or_return
+	server_db_create_tables(db) or_return
+	user_db_create_tables(db) or_return
+	channel_db_create_tables(db) or_return
 	return
 }

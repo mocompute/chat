@@ -130,6 +130,14 @@ test_user_session_create :: proc(t: ^testing.T) {
 		fmt.eprintln("refreshed = ", refreshed_uuid)
 		testing.expect(t, refreshed_uuid != session_uuid)
 	}
+	input = {"channel-create", server_uuid, "dazzle"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		channel := cast(^Channel)td.result.(rawptr)
+		testing.expect_value(t, channel.name, "dazzle")
+	}
 }
 
 

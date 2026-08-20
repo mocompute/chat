@@ -28,6 +28,12 @@ to release internal buffers.
 
 */
 
+Channel_Create :: struct {
+	server: Uuid,
+	name: string,
+	result: ^Channel,
+}
+
 Database_Create :: struct {
 	path: string,
 }
@@ -98,6 +104,7 @@ Version_Get :: struct {
 
 
 Command :: union {
+	Channel_Create,
 	Database_Create,
 	Server_Create,
 	Session_Create,
@@ -128,6 +135,7 @@ API_Item :: struct {
 DB_CREATE_COMMAND :: "db-create"
 API :: [?]API_Item{
 	{DB_CREATE_COMMAND, 1, mk_database_create},
+	{"channel-create", 2, mk_channel_create},
 	{"server-create", 1, mk_server_create},
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
@@ -155,6 +163,12 @@ api_index_deinit :: proc() {
 }
 mk_version_get :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	query = Version_Get{}
+	return
+}
+mk_channel_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	server := _get_uuid(words[1]) or_return
+	name := words[2]
+	command = Channel_Create{server=server, name=name}
 	return
 }
 mk_database_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
@@ -272,6 +286,7 @@ action_error_to_string :: proc(error: Action_Error) -> (msg: string) {
 action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 	if command != nil {
 		switch _ in command {
+		case Channel_Create:  p = channel_create
 		case Database_Create: p = nil
 		case Server_Create:   p = server_create
 		case Session_Create:  p = session_create

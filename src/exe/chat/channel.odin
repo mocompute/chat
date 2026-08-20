@@ -10,19 +10,18 @@ Channel :: struct {
 	name: string,
 }
 
-Channel_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"channelname", cstring}}
-Channel_Cols :: "uuid, server, channelname"
+Channel_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"name", cstring}}
+Channel_Cols :: "uuid, server, name"
 Channel_Cols_N :: 3
 Channel_Create_Table :: `-- sql
 	CREATE TABLE IF NOT EXISTS channel(
 	uuid            BLOB PRIMARY KEY,
 	server          BLOB NOT NULL REFERENCES server(uuid) ON DELETE CASCADE,
-	channelname     TEXT NOT NULL UNIQUE,
+	name     TEXT NOT NULL UNIQUE
 	) WITHOUT ROWID;
 	CREATE UNIQUE INDEX IF NOT EXISTS channel_server_name ON channel(
-	server, channelname
-	);
-	`
+	server, name
+	);`
 
 channel_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: Channel, err: Db_Error) {
 	res: [Channel_Cols_N]Db_Value
@@ -55,8 +54,6 @@ channel_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
 	channel_deinit(cast(^Channel)self, allocator)
 }
 
-import "core:fmt"
-
 channel_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(Channel_Create)
@@ -64,7 +61,6 @@ channel_create :: proc(task: Task) {
 	channel := Channel{uuid=uuid_v7(), server=cmd.server, name=cmd.name}
 	err := channel_db_create(&channel, tl_db_conn)
 
-	fmt.eprintln("channel_create: error: ", err)
 	if !is_db_error(err, task_data) {
 		cmd.result = channel_deep_copy(channel)
 
@@ -75,20 +71,20 @@ channel_create :: proc(task: Task) {
 
 channel_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 	err = db_exec_multi_null(db, Channel_Create_Table)
-	fmt.eprintln("channel_db_create_tables = ", err)
+	assert(err == nil)
 	return
 }
+
 channel_db_create :: proc(self: ^Channel, db: Db) -> (err: Db_Error) {
 	sql :: `-- sql
-	INSERT INTO channel (uuid, server, channelname)
-	VALUES(:uuid, :server, :channelname);
+	INSERT INTO channel (uuid, server, name)
+	VALUES(:uuid, :server, :name);
 	`
-	stmt, err2 := db_prepare_bind(db, sql, {
+	stmt := db_prepare_bind(db, sql, {
 		{":uuid", self.uuid[:]},
 		{":server", self.server[:]},
-		{":channelname", self.name},
-	})
-	fmt.eprintfln("channel_db_create: err = %v", err2)
+		{":name", self.name},
+	}) or_return
 	defer db_finalize(stmt)
 	return db_insert_unique(stmt)
 }
