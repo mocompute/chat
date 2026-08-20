@@ -16,8 +16,15 @@ cast returns immediately. The Action will invoke a callback, if any was configur
 call will queue the Action to the worker pool (or single thread for Command) and will
 busy-wait until the action is complete, then return to the caller.
 
+The APIs for Actions are defined as structs. Fields listed before the optional `result`
+field must be supplied when invoking the Action. The `result` field will hold the
+result. If there is no result, no `result` field appears in the struct. Fields appearing
+after `result` are context required by the Action and are inserted by the action
+constructor functions.
+
 Lifetimes: task results which are placed in Task_Data.result.(rawptr) will be freed by
-the command processor.
+the command processor. An optional deinit proc can be placed in Task_Data.result_deinit
+to release internal buffers.
 
 */
 
@@ -163,11 +170,8 @@ mk_server_lookup_name :: proc(words: []string, app: ^App) -> (command: Command, 
 	return
 }
 mk_server_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	if uuid, ok := uuid_from_hex(words[1]); ok {
-		query = Server_Lookup_Uuid{uuid=uuid}
-	} else {
-		err = .Bad_Argument
-	}
+	uuid := _get_uuid(words[1]) or_return
+	query = Server_Lookup_Uuid{uuid=uuid}
 	return
 }
 mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
@@ -178,12 +182,7 @@ mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, quer
 	sc := Session_Create{username=username, password=password}
 	copy(sc.pepper[:], app.config.pepper[:])
 	sc.session_manager = &app.session_manager
-
-	if uuid, ok := uuid_from_hex(server); ok {
-		sc.server = uuid
-	} else {
-		err = .Bad_Argument
-	}
+	sc.server = _get_uuid(server) or_return
 
 	command = sc
 	return
@@ -193,12 +192,7 @@ mk_session_refresh :: proc(words: []string, app: ^App) -> (command: Command, que
 
 	sr: Session_Refresh
 	sr.session_manager = &app.session_manager
-
-	if uuid, ok := uuid_from_hex(session); ok {
-		sr.uuid = uuid
-	} else {
-		err = .Bad_Argument
-	}
+	sr.uuid = _get_uuid(session) or_return
 
 	command = sr
 	return
@@ -209,14 +203,7 @@ mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: 
 	password := words[3]
 
 	uc := User_Create{username=username, password=password}
-
-	if uuid, ok := uuid_from_hex(server); ok {
-		uc.server = uuid
-	} else {
-		fmt.eprintfln("mk_user_create: uuid error: '%s'", server)
-		err = .Bad_Argument
-		return
-	}
+	uc.server = _get_uuid(server) or_return
 
 	copy(uc.pepper[:], app.config.pepper[:])
 
@@ -227,13 +214,7 @@ mk_user_lookup_username :: proc(words: []string, app: ^App) -> (command: Command
 	server := words[1]
 	username := words[2]
 	ulu := User_Lookup_Username{username=username}
-	if uuid, ok := uuid_from_hex(server); ok {
-		ulu.server = uuid
-	} else {
-		fmt.eprintfln("mk_user_lookup_username: uuid error: '%s'", server)
-		err = .Bad_Argument
-		return
-	}
+	ulu.server = _get_uuid(server) or_return
 	query = ulu
 	return
 }
@@ -242,20 +223,19 @@ mk_user_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, qu
 	user := words[2]
 
 	ulu: User_Lookup_Uuid
-	if uuid, ok := uuid_from_hex(server); ok {
-		ulu.server = uuid
-	} else {
-		err = .Bad_Argument
-		return
-	}
-	if uuid, ok := uuid_from_hex(user); ok {
-		ulu.user = uuid
-	} else {
-		err = .Bad_Argument
-		return
-	}
+	ulu.server = _get_uuid(server) or_return
+	ulu.user = _get_uuid(user) or_return
 	query = ulu
 	return
+}
+
+_get_uuid :: proc(s: string) -> (uuid: Uuid, err: Action_Error) {
+	ok: bool
+	if uuid, ok = uuid_from_hex(s); ok {
+		return uuid, nil
+	} else {
+		return {}, .Bad_Argument
+	}
 }
 
 words_to_action :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
