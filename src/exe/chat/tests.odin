@@ -83,6 +83,7 @@ test_user_session_create :: proc(t: ^testing.T) {
 		server_uuid = uuid_to_hex(server.uuid, context.temp_allocator)
 	}
 
+	user_uuid: string
 	input = {"user-create", server_uuid, "bar", "baz"}
 	{
 		td := dispatch(app, input)
@@ -90,6 +91,7 @@ test_user_session_create :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Ok)
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
+		user_uuid = uuid_to_hex(user.uuid, context.temp_allocator)
 	}
 	input = {"user-lookup-username", server_uuid, "bar"}
 	{
@@ -99,7 +101,14 @@ test_user_session_create :: proc(t: ^testing.T) {
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
 	}
-
+	input = {"user-lookup-uuid", server_uuid, user_uuid}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
+	}
 	input = {"session-create", server_uuid, "bar", "baz"}
 	{
 		td := dispatch(app, input)

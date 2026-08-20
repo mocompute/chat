@@ -104,6 +104,20 @@ user_lookup_username :: proc(task: Task) {
 	}
 	return
 }
+user_lookup_uuid :: proc(task: Task) {
+	task_data := task_to_task_data(task)
+	q := task_data.query.(User_Lookup_Uuid)
+
+	user, err := user_db_lookup_uuid(tl_db_conn, q.server, q.user, context.allocator)
+
+	if !is_db_error(err, task_data) {
+		q.result = new_clone(user)
+
+		task_data.result = q.result
+		task_data.result_deinit = user_deinit_rawptr
+	}
+	return
+}
 
 user_hash_create :: proc(server: Uuid, username, password: string, pepper: []u8) -> (user: User, err: Db_Error) {
 	user.server = server
@@ -137,6 +151,21 @@ user_db_lookup_username :: proc(db: Db, server: Uuid, username: string, allocato
 	stmt := db_prepare_bind(db, sql, {
 		{":server", server[:]},
 		{":username", username},
+	}) or_return
+	defer db_finalize(stmt)
+
+	self = db_retrieve_one(User, stmt, user_from_row, allocator) or_return
+	return
+}
+
+user_db_lookup_uuid :: proc(db: Db, server: Uuid, user: Uuid, allocator := context.allocator) -> (self: User, err: Db_Error) {
+	server := server
+	user := user
+	sql :: `SELECT ` + User_Cols + ` FROM user WHERE server = :server AND uuid = :uuid;`
+
+	stmt := db_prepare_bind(db, sql, {
+		{":server", server[:]},
+		{":uuid", user[:]},
 	}) or_return
 	defer db_finalize(stmt)
 

@@ -76,6 +76,11 @@ User_Lookup_Username :: struct {
 	username: string,
 	result: ^User,
 }
+User_Lookup_Uuid :: struct {
+	server: Uuid,
+	user: Uuid,
+	result: ^User,
+}
 
 
 
@@ -95,6 +100,7 @@ Query :: union {
 	Server_Lookup_Name,
 	Server_Lookup_Uuid,
 	User_Lookup_Username,
+	User_Lookup_Uuid,
 	Version_Get,
 }
 Action_Error :: enum {
@@ -120,6 +126,7 @@ API :: [?]API_Item{
 	{"session-create", 3, mk_session_create},
 	{"user-create", 3, mk_user_create},
 	{"user-lookup-username", 2, mk_user_lookup_username},
+	{"user-lookup-uuid", 2, mk_user_lookup_uuid},
 	{"version", 0, mk_version_get},
 }
 
@@ -213,6 +220,26 @@ mk_user_lookup_username :: proc(words: []string, app: ^App) -> (command: Command
 	query = ulu
 	return
 }
+mk_user_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	server := words[1]
+	user := words[2]
+
+	ulu: User_Lookup_Uuid
+	if uuid, ok := uuid_from_hex(server); ok {
+		ulu.server = uuid
+	} else {
+		err = .Bad_Argument
+		return
+	}
+	if uuid, ok := uuid_from_hex(user); ok {
+		ulu.user = uuid
+	} else {
+		err = .Bad_Argument
+		return
+	}
+	query = ulu
+	return
+}
 
 words_to_action :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	if len(words) == 0 do return nil, nil, .Empty
@@ -260,6 +287,7 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 		case Server_Lookup_Name:    p = server_lookup_name
 		case Server_Lookup_Uuid:    p = server_lookup_uuid
 		case User_Lookup_Username:  p = user_lookup_username
+		case User_Lookup_Uuid:      p = user_lookup_uuid
 		case Version_Get:           p = version_get
 		}
 
