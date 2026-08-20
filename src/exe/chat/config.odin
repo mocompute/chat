@@ -64,12 +64,11 @@ config_db_retrieve :: proc(db: Db) -> (self: Config, err: Db_Error) {
 
 	err = db_step(stmt)
 	if err == sqlite3.Result.Row {
-		db_columns(stmt, row, res[:]) or_return
+		db_get_columns(stmt, row, res[:]) or_return
 
 		self.version = cast(i32) res[0].(i64)
 		pepper := res[1].([]u8)
-		assert(len(self.pepper) == len(pepper))
-		copy(self.pepper[:], pepper)
+		copy_exact(self.pepper[:], pepper)
 		err = nil
 	}
 	return

@@ -25,19 +25,16 @@ Channel_Create_Table :: `-- sql
 
 channel_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: Channel, err: Db_Error) {
 	res: [Channel_Cols_N]Db_Value
-	db_columns(stmt, Channel_Row, res[:]) or_return
+	db_get_columns(stmt, Channel_Row, res[:]) or_return
 
 	bs: []u8
 	bs = res[0].([]u8)
-	assert(len(self.uuid) == len(bs))
-	copy(self.uuid[:], bs)
+	copy_exact(self.uuid[:], bs)
 
 	bs = res[1].([]u8)
-	assert(len(self.server) == len(bs))
-	copy(self.server[:], bs)
+	copy_exact(self.server[:], bs)
 
 	self.name = strings.clone_from_cstring(res[2].(cstring), allocator)
-
 	return
 }
 

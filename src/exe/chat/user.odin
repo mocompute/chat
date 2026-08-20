@@ -37,28 +37,23 @@ User_Create_Table :: `-- sql
 
 user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: User, err: Db_Error) {
 	res: [User_Cols_N]Db_Value
-	db_columns(stmt, User_Row, res[:]) or_return
+	db_get_columns(stmt, User_Row, res[:]) or_return
 
 	bs: []u8
 	bs = res[0].([]u8)
-	assert(len(self.uuid) == len(bs))
-	copy(self.uuid[:], bs)
+	copy_exact(self.uuid[:], bs)
 
 	bs = res[1].([]u8)
-	assert(len(self.server) == len(bs))
-	copy(self.server[:], bs)
+	copy_exact(self.server[:], bs)
 
-	// stmt will be finalized before this object is needed
+	// stmt will be finalized, so we need to clone
 	self.username = strings.clone_from_cstring(res[2].(cstring), allocator)
 
 	bs = res[3].([]u8)
-	assert(len(self.hashed_password) == len(bs))
-	copy(self.hashed_password[:], bs)
+	copy_exact(self.hashed_password[:], bs)
 
 	bs = res[4].([]u8)
-	assert(len(self.salt) == len(bs))
-	copy(self.salt[:], bs)
-
+	copy_exact(self.salt[:], bs)
 	return
 }
 

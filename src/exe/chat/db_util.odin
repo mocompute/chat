@@ -63,7 +63,7 @@ db_bind :: proc(stmt: sqlite3.Statement, specs: []Db_Bind_Spec) -> (err: Db_Erro
 	return
 }
 
-db_columns :: proc(stmt: sqlite3.Statement, specs: []Db_Column_Spec, out: []Db_Value) -> (err: Db_Error) {
+db_get_columns :: proc(stmt: sqlite3.Statement, specs: []Db_Column_Spec, out: []Db_Value) -> (err: Db_Error) {
 	using sqlite3
 
 	ensure(len(specs) == len(out))

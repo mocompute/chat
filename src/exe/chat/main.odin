@@ -93,6 +93,7 @@ fatal :: proc(message: string, exit := true) {
 }
 
 // Caller must task_data_destroy the return value.
+@(require_results)
 _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Task_Data) {
 	command, query, err := words_to_action(words, self)
 	if err == nil {
@@ -120,6 +121,7 @@ _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Tas
 
 
 // Caller must task_data_destroy the return value.
+@(require_results)
 dispatch :: proc(self: ^App, words: []string) -> ^Task_Data {
 	return _dispatch(self, words, exit_on_error=false)
 }

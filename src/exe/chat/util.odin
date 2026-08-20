@@ -36,3 +36,8 @@ uuid_from_hex :: proc(src: string) -> (uuid: Uuid, ok: bool) {
 unix_time :: proc() -> i64 {
 	return time.time_to_unix(time.now())
 }
+
+copy_exact :: proc(dst, src: $T/[]$E) {
+	ensure(len(dst) == len(src))
+	copy_slice(dst, src)
+}
