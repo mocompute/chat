@@ -1,9 +1,9 @@
 package main
 
+import "core:mem"
 import "core:os"
 import "core:sync"
 import "core:thread"
-@(require) import "core:fmt"
 
 import "../../../../base/src/lib/sqlite3"
 
@@ -29,7 +29,7 @@ Task_Data :: struct {
 		rawptr,		// will be freed by task_data_destroy
 		i64,
 	},
-	result_deinit: proc(rawptr), // called before free of result.rawptr
+	result_deinit: proc(rawptr, mem.Allocator), // called before free of result.rawptr
 
 	message: string,
 	status: enum {
@@ -79,7 +79,7 @@ task_data_destroy :: proc(self: ^Task_Data) {
 	delete(self.message)
 	if v, ok := self.result.(rawptr); ok {
 		if self.result_deinit != nil {
-			self.result_deinit(v)
+			self.result_deinit(v, context.allocator)
 		}
 		free(v)
 	}

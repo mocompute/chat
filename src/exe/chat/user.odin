@@ -35,7 +35,7 @@ User_Create_Table :: `-- sql
 	)
 	`
 
-user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
+user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: User, err: Db_Error) {
 	res: [User_Cols_N]Db_Value
 	db_columns(stmt, User_Row, res[:]) or_return
 
@@ -46,7 +46,8 @@ user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
 	bs = res[1].([]u8)
 	copy(self.server[:], bs)
 
-	self.username = strings.clone_from_cstring(res[2].(cstring))
+	// stmt will be finalized before this object is needed
+	self.username = strings.clone_from_cstring(res[2].(cstring), allocator)
 
 	bs = res[3].([]u8)
 	copy(self.hashed_password[:], bs)
@@ -57,11 +58,17 @@ user_from_row :: proc(stmt: sqlite3.Statement) -> (self: User, err: Db_Error) {
 	return
 }
 
-user_deinit :: proc(self: ^User) {
-	delete(self.username)
+user_deep_copy :: proc(self: User, allocator := context.allocator) -> ^User {
+	out := new_clone(self)
+	out.username = strings.clone(out.username, allocator)
+	return out
 }
-user_deinit_rawptr :: proc(self: rawptr) {
-	user_deinit(cast(^User)self)
+
+user_deinit :: proc(self: ^User, allocator := context.allocator) {
+	delete(self.username, allocator)
+}
+user_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
+	user_deinit(cast(^User)self, allocator)
 }
 
 user_create :: proc(task: Task) {
@@ -76,9 +83,7 @@ user_create :: proc(task: Task) {
 	err = user_db_create(&user, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
-		user2 := new_clone(user)
-		user2.username = strings.clone(user2.username)
-		cmd.result = user2
+		cmd.result = user_deep_copy(user)
 
 		task_data.result = cmd.result
 		task_data.result_deinit = user_deinit_rawptr
@@ -89,7 +94,7 @@ user_lookup_username :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.query.(User_Lookup_Username)
 
-	user, err := user_db_lookup_username(tl_db_conn, q.server, q.username)
+	user, err := user_db_lookup_username(tl_db_conn, q.server, q.username, context.allocator)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(user)
@@ -125,7 +130,7 @@ user_db_create :: proc(self: ^User, db: Db) -> (err: Db_Error) {
 	return db_insert_unique(stmt)
 }
 
-user_db_lookup_username :: proc(db: Db, server: Uuid, username: string) -> (self: User, err: Db_Error) {
+user_db_lookup_username :: proc(db: Db, server: Uuid, username: string, allocator := context.allocator) -> (self: User, err: Db_Error) {
 	server := server
 	sql :: `SELECT ` + User_Cols + ` FROM user WHERE server = :server AND username = :username;`
 
@@ -135,7 +140,7 @@ user_db_lookup_username :: proc(db: Db, server: Uuid, username: string) -> (self
 	}) or_return
 	defer db_finalize(stmt)
 
-	self = db_retrieve_one(User, stmt, user_from_row) or_return
+	self = db_retrieve_one(User, stmt, user_from_row, allocator) or_return
 	return
 }
 
