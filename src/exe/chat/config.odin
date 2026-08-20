@@ -67,7 +67,9 @@ config_db_retrieve :: proc(db: Db) -> (self: Config, err: Db_Error) {
 		db_columns(stmt, row, res[:]) or_return
 
 		self.version = cast(i32) res[0].(i64)
-		copy(self.pepper[:], res[1].([]u8))
+		pepper := res[1].([]u8)
+		assert(len(self.pepper) == len(pepper))
+		copy(self.pepper[:], pepper)
 		err = nil
 	}
 	return

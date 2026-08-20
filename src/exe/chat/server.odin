@@ -19,7 +19,8 @@ server_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator)
 	db_columns(stmt, Server_Row, res[:]) or_return
 
 	uuid := res[0].([]u8)
-	copy(self.uuid[:], uuid[:])
+	assert(len(self.uuid) == len(uuid))
+	copy(self.uuid[:], uuid)
 
 	self.name = strings.clone_from_cstring(res[1].(cstring))
 	return

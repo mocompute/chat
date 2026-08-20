@@ -180,7 +180,7 @@ mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, quer
 	password := words[3]
 
 	sc := Session_Create{username=username, password=password}
-	copy(sc.pepper[:], app.config.pepper[:])
+	sc.pepper = app.config.pepper
 	sc.session_manager = &app.session_manager
 	sc.server = _get_uuid(server) or_return
 
@@ -204,8 +204,7 @@ mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: 
 
 	uc := User_Create{username=username, password=password}
 	uc.server = _get_uuid(server) or_return
-
-	copy(uc.pepper[:], app.config.pepper[:])
+	uc.pepper = app.config.pepper
 
 	command = uc
 	return
