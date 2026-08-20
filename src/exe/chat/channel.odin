@@ -1,0 +1,94 @@
+package main
+
+import "../../../../base/src/lib/sqlite3"
+
+import "core:strings"
+
+Channel :: struct {
+	uuid: Uuid,
+	server: Uuid,
+	name: string,
+}
+
+Channel_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"channelname", cstring}}
+Channel_Cols :: "uuid, server, channelname"
+Channel_Cols_N :: 3
+Channel_Create_Table :: `-- sql
+	CREATE TABLE IF NOT EXISTS channel(
+	uuid            BLOB PRIMARY KEY,
+	server          BLOB NOT NULL REFERENCES server(uuid) ON DELETE CASCADE,
+	channelname     TEXT NOT NULL UNIQUE,
+	) WITHOUT ROWID;
+	CREATE UNIQUE INDEX IF NOT EXISTS channel_server_name ON channel(
+	server, channelname
+	);
+	`
+
+channel_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: Channel, err: Db_Error) {
+	res: [Channel_Cols_N]Db_Value
+	db_columns(stmt, Channel_Row, res[:]) or_return
+
+	bs: []u8
+	bs = res[0].([]u8)
+	assert(len(self.uuid) == len(bs))
+	copy(self.uuid[:], bs)
+
+	bs = res[1].([]u8)
+	assert(len(self.server) == len(bs))
+	copy(self.server[:], bs)
+
+	self.name = strings.clone_from_cstring(res[2].(cstring), allocator)
+
+	return
+}
+
+channel_deep_copy :: proc(self: Channel, allocator := context.allocator) -> ^Channel {
+	out := new_clone(self)
+	out.name = strings.clone(out.name, allocator)
+	return out
+}
+
+channel_deinit :: proc(self: ^Channel, allocator := context.allocator) {
+	delete(self.name, allocator)
+}
+channel_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
+	channel_deinit(cast(^Channel)self, allocator)
+}
+
+import "core:fmt"
+
+channel_create :: proc(task: Task) {
+	task_data := task_to_task_data(task)
+	cmd := task_data.command.(Channel_Create)
+
+	channel := Channel{uuid=uuid_v7(), server=cmd.server, name=cmd.name}
+	err := channel_db_create(&channel, tl_db_conn)
+
+	fmt.eprintln("channel_create: error: ", err)
+	if !is_db_error(err, task_data) {
+		cmd.result = channel_deep_copy(channel)
+
+		task_data.result = cmd.result
+		task_data.result_deinit = channel_deinit_rawptr
+	}
+}
+
+channel_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
+	err = db_exec_multi_null(db, Channel_Create_Table)
+	fmt.eprintln("channel_db_create_tables = ", err)
+	return
+}
+channel_db_create :: proc(self: ^Channel, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	INSERT INTO channel (uuid, server, channelname)
+	VALUES(:uuid, :server, :channelname);
+	`
+	stmt, err2 := db_prepare_bind(db, sql, {
+		{":uuid", self.uuid[:]},
+		{":server", self.server[:]},
+		{":channelname", self.name},
+	})
+	fmt.eprintfln("channel_db_create: err = %v", err2)
+	defer db_finalize(stmt)
+	return db_insert_unique(stmt)
+}

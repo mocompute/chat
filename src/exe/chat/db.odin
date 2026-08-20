@@ -38,8 +38,7 @@ db_open_flags :: proc(filename: cstring, flags: c.int) -> (db: Db, err: Db_Error
 	open_v2(filename, &db, flags, transmute(cstring)c.NULL) or_return
 	sql :: `-- sql
 	PRAGMA foreign_keys = ON;
-	PRAGMA journal_mode = WAL;
-	`
+	PRAGMA journal_mode = WAL;`
 	err = db_exec_multi(db, sql)
 	return
 }
@@ -55,8 +54,7 @@ db_open_multi_threaded :: proc(filename: cstring) -> (db: Db, err: Db_Error) {
 	if err != nil do return
 	sql :: `-- sql
 	PRAGMA synchronous = NORMAL;
-	PRAGMA busy_timeout = 5000;
-	`
+	PRAGMA busy_timeout = 5000;`
 	err = db_exec_multi(db, sql)
 	return
 }
@@ -68,8 +66,7 @@ db_open_memory :: proc() -> (db: Db, err: Db_Error) {
 
 	open(path, &db) or_return
 	sql :: `-- sql
-	PRAGMA foreign_keys = ON;
-	`
+	PRAGMA foreign_keys = ON;`
 	err = db_exec_multi(db, sql)
 	return
 }
@@ -77,8 +74,7 @@ db_open_memory :: proc() -> (db: Db, err: Db_Error) {
 db_close :: proc(db: Db) -> (err: Db_Error) {
 	sql :: `-- sql
 	PRAGMA analysis_limit = 500;
-	PRAGMA optimize;
-	`
+	PRAGMA optimize;`
 	err = db_exec_multi(db, sql)
 	if err != nil {
 		fmt.eprintfln("error: error before closing database: %s", err)
@@ -100,20 +96,24 @@ db_finalize :: proc(stmt: sqlite3.Statement) {
 	sqlite3.finalize(stmt)
 }
 
-db_exec_null :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
+db_exec_null :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db_Error) {
 	using sqlite3
 
 	stmt: Statement
 	stmt, err = db_prepare(db, sql)
-	if stmt == nil do return err // e.g. empty string returns ok but nil stmt
+	if stmt == nil {
+		fmt.eprintfln("error: expected sql: '%s'", sql)
+	}
+	ensure(stmt != nil, loc=loc)
 	defer finalize(stmt)
 
 	err = step(stmt)
 	if err != .Done do return .Expected_Null_Return
+	err = nil
 	return
 }
 
-db_exec_multi_null :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
+db_exec_multi_null :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db_Error) {
 	using sqlite3
 
 	tail := sql
@@ -121,7 +121,10 @@ db_exec_multi_null :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
 	for (cast([^]u8) tail)[0] != 0 {
 		stmt: Statement
 		err = prepare_v2(db, tail, -1, &stmt, &tail)
-		if stmt == nil do return err // e.g. empty string returns ok but nil stmt
+		if stmt == nil {
+			fmt.eprintfln("error: expected sql: '%s'", sql)
+		}
+		ensure(stmt != nil, loc=loc)
 		defer finalize(stmt)
 
 		err = step(stmt)
@@ -129,11 +132,12 @@ db_exec_multi_null :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
 			fmt.eprintfln("error: expected null: '%s', got %s", sql, err)
 			return .Expected_Null_Return
 		}
+		err = nil
 	}
 	return
 }
 
-db_exec_multi :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
+db_exec_multi :: proc(db: Db, sql: cstring, loc := #caller_location) -> (err: Db_Error) {
 	using sqlite3
 
 	tail := sql
@@ -141,7 +145,10 @@ db_exec_multi :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
 	for (cast([^]u8) tail)[0] != 0 {
 		stmt: Statement
 		err = prepare_v2(db, tail, -1, &stmt, &tail)
-		if stmt == nil do return err // e.g. empty string returns ok but nil stmt
+		if stmt == nil {
+			fmt.eprintfln("error: expected sql: '%s'", sql)
+		}
+		ensure(stmt != nil, loc=loc)
 		defer finalize(stmt)
 
 		err = step(stmt)
@@ -149,16 +156,22 @@ db_exec_multi :: proc(db: Db, sql: cstring) -> (err: Db_Error) {
 			fmt.eprintfln("error: '%s', got %s", sql, err)
 			return
 		}
+		err = nil
 	}
 	return
 }
 
-db_exec_one_row :: proc(db: Db, sql: cstring, cb: Db_Statement_Callback) -> (err: Db_Error) {
+db_exec_one_row :: proc(db: Db, sql: cstring, cb: Db_Statement_Callback, loc := #caller_location) -> (err: Db_Error) {
 	using sqlite3
 
 	stmt: Statement
 	stmt, err = db_prepare(db, sql)
+	if stmt == nil {
+		fmt.eprintfln("error: expected sql: '%s'", sql)
+	}
+	ensure(stmt != nil, loc=loc)
 	defer finalize(stmt)
+
 
 	err = step(stmt)
 	if err != .Row do return .Expected_Row
