@@ -94,6 +94,7 @@ Command :: union {
 	Database_Create,
 	Server_Create,
 	Session_Create,
+	Session_Refresh,
 	User_Create,
 }
 Query :: union {
@@ -124,6 +125,7 @@ API :: [?]API_Item{
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
 	{"session-create", 3, mk_session_create},
+	{"session-refresh", 1, mk_session_refresh},
 	{"user-create", 3, mk_user_create},
 	{"user-lookup-username", 2, mk_user_lookup_username},
 	{"user-lookup-uuid", 2, mk_user_lookup_uuid},
@@ -184,6 +186,21 @@ mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, quer
 	}
 
 	command = sc
+	return
+}
+mk_session_refresh :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	session := words[1]
+
+	sr: Session_Refresh
+	sr.session_manager = &app.session_manager
+
+	if uuid, ok := uuid_from_hex(session); ok {
+		sr.uuid = uuid
+	} else {
+		err = .Bad_Argument
+	}
+
+	command = sr
 	return
 }
 mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
@@ -279,6 +296,7 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 		case Database_Create: p = nil
 		case Server_Create:   p = server_create
 		case Session_Create:  p = session_create
+		case Session_Refresh: p = session_refresh
 		case User_Create:     p = user_create
 		}
 

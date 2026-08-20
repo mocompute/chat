@@ -58,6 +58,31 @@ session_manager_remove :: proc(self: ^Session_Manager, uuid: Uuid) -> (ok: bool)
 	return
 }
 
+session_manager_refresh :: proc(self: ^Session_Manager, uuid: Uuid) -> (refreshed: Uuid, status: Task_Proc_Status) {
+	session: Session
+	ok: bool
+
+	// outside of mutex
+	now := unix_time()
+	refreshed = uuid_v4()
+
+	sync.mutex_guard(&self.mutex)
+	session, ok = lru.get(&self.cache, uuid)
+	if !ok {
+		return {}, .Not_Found
+	}
+
+	if session.expires < now {
+		// Refuse to refresh an expired token. Instead, delete it and return error.
+		lru.remove(&self.cache, uuid)
+		return {}, .Conflict
+	}
+
+	lru.remove(&self.cache, uuid)
+	lru.set(&self.cache, refreshed, session)
+	return refreshed, .Ok
+}
+
 session_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(Session_Create)
@@ -80,4 +105,15 @@ session_create :: proc(task: Task) {
 		task_data.status = .Conflict
 	}
 	return
+}
+
+session_refresh :: proc(task: Task) {
+	task_data := task_to_task_data(task)
+	cmd := task_data.command.(Session_Refresh)
+
+	refreshed: Uuid
+	refreshed, task_data.status = session_manager_refresh(cmd.session_manager, cmd.uuid)
+	if task_data.status == .Ok {
+		task_data.result = cast(rawptr) new_clone(refreshed)
+	}
 }

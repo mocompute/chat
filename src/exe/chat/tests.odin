@@ -109,13 +109,26 @@ test_user_session_create :: proc(t: ^testing.T) {
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
 	}
+
+	session_uuid: string
 	input = {"session-create", server_uuid, "bar", "baz"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
-		_, ok := td.result.(rawptr)
-		testing.expect(t, ok)
+		session := cast(^Uuid)td.result.(rawptr)
+		session_uuid = uuid_to_hex(session^, context.temp_allocator)
+	}
+	input = {"session-refresh", session_uuid}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		refreshed := cast(^Uuid)td.result.(rawptr)
+		refreshed_uuid := uuid_to_hex(refreshed^, context.temp_allocator)
+		fmt.eprintln("session   = ", session_uuid)
+		fmt.eprintln("refreshed = ", refreshed_uuid)
+		testing.expect(t, refreshed_uuid != session_uuid)
 	}
 }
 

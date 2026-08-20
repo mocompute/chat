@@ -19,6 +19,14 @@ Ticket :: struct {
 	status: Task_Status,
 }
 
+Task_Proc_Status :: enum {
+	Ok,
+	Runtime_Error,
+	Conflict,
+	Not_Found,
+	Database_Error,
+}
+
 Task_Data :: struct {
 	id: Uuid,
 	app: ^App,
@@ -32,13 +40,7 @@ Task_Data :: struct {
 	result_deinit: proc(rawptr, mem.Allocator), // called before free of result.rawptr
 
 	message: string,
-	status: enum {
-		Runtime_Error,
-		Ok,
-		Conflict,
-		Not_Found,
-		Database_Error,
-	},
+	status: Task_Proc_Status,
 
 	// set by cast/call, do not set directly
 	callback: Task_Callback,
