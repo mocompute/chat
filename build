@@ -117,6 +117,7 @@ build_sqlite3()
 	-DSQLITE_OMIT_SHARED_CACHE
 	-DSQLITE_OMIT_AUTOINIT
 	-DSQLITE_STRICT_SUBTYPE=1
+	-DSQLITE_DEFAULT_FOREIGN_KEYS=1
 	"
 	cwd=$(pwd)
 	cd src/vendor/sqlite3/sqlite-amalgamation-3530400
