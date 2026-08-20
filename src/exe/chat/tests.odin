@@ -126,8 +126,6 @@ test_user_session_create :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Ok)
 		refreshed := cast(^Uuid)td.result.(rawptr)
 		refreshed_uuid := uuid_to_hex(refreshed^, context.temp_allocator)
-		fmt.eprintln("session   = ", session_uuid)
-		fmt.eprintln("refreshed = ", refreshed_uuid)
 		testing.expect(t, refreshed_uuid != session_uuid)
 	}
 	input = {"channel-create", server_uuid, "dazzle"}

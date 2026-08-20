@@ -58,7 +58,6 @@ app_open_db :: proc(self: ^App, db_path: string) {
 }
 
 app_close_db :: proc(self: ^App) {
-	fmt.eprintln("app_close_db: draining task pools...")
 	task_manager_drain(&self.command_pool)
 	task_manager_drain(&self.query_pool)
 
@@ -68,7 +67,6 @@ app_close_db :: proc(self: ^App) {
 	session_manager_deinit(&self.session_manager)
 
 	delete(self.task_thread_init.db_path)
-	fmt.eprintln("app_close_db: draining task pools done.")
 }
 
 create_db :: proc(path: string) -> (err: Db_Error) {
