@@ -24,11 +24,11 @@ User_Cols :: "uuid, server, username, hashed_password, salt"
 User_Cols_N :: 5
 User_Create_Table :: `-- sql
 	CREATE TABLE IF NOT EXISTS user(
-	uuid      BLOB PRIMARY KEY,
-	server    BLOB NOT NULL REFERENCES server(uuid) ON DELETE CASCADE,
-	username  TEXT NOT NULL UNIQUE,
+	uuid            BLOB PRIMARY KEY,
+	server          BLOB NOT NULL REFERENCES server(uuid) ON DELETE CASCADE,
+	username        TEXT NOT NULL UNIQUE,
 	hashed_password BLOB NOT NULL,
-	salt      BLOB NOT NULL
+	salt            BLOB NOT NULL
 	) WITHOUT ROWID;
 	CREATE UNIQUE INDEX IF NOT EXISTS user_server_username ON user(
 	server, username

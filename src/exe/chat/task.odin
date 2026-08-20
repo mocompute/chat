@@ -90,6 +90,8 @@ task_manager_init :: proc(self: ^Task_Manager, thread_count: int, task_thread_in
 	self.tickets = make(map[Uuid]Ticket)
 
 	ud := cast(rawptr)task_thread_init_data
+
+	// thread-safe allocator is required.
 	thread.pool_init(&self.pool, os.heap_allocator(), thread_count, task_thread_init, ud, task_thread_fini, nil)
 }
 
