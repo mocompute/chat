@@ -81,7 +81,7 @@ user_create :: proc(task: Task) {
 		cmd.result = user2
 
 		task_data.result = cmd.result
-		task_data.result_destruct = user_deinit_rawptr
+		task_data.result_deinit = user_deinit_rawptr
 	}
 }
 
@@ -95,7 +95,7 @@ user_lookup_username :: proc(task: Task) {
 		q.result = new_clone(user)
 
 		task_data.result = q.result
-		task_data.result_destruct = user_deinit_rawptr
+		task_data.result_deinit = user_deinit_rawptr
 	}
 	return
 }
