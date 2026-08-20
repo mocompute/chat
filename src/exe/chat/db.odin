@@ -140,12 +140,12 @@ db_exec_one_row :: proc(db: Db, sql: cstring, cb: Db_Statement_Callback, loc := 
 
 	ensure(err == nil, loc=loc)
 
-	err = sqlite3.step(stmt)
+	err = db_step(stmt)
 	if err != .Row do return .Expected_Row
 
 	cb(stmt)
 
-	err = sqlite3.step(stmt)
+	err = db_step(stmt)
 	if err != .Done do return .Unexpected_Row
 	err = nil
 

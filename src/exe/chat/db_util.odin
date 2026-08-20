@@ -6,6 +6,7 @@ import "core:c"
 import "core:fmt"
 import "core:mem"
 import "core:slice"
+import "core:thread"
 
 Db_Value :: union {
 	i32,
@@ -100,23 +101,47 @@ db_columns :: proc(stmt: sqlite3.Statement, specs: []Db_Column_Spec, out: []Db_V
 }
 
 db_retrieve_one :: proc($T: typeid, stmt: sqlite3.Statement, construct: proc(sqlite3.Statement, mem.Allocator) -> (T, Db_Error), allocator := context.allocator) -> (result: T, err: Db_Error) {
-	err = sqlite3.step(stmt)
-	if err == sqlite3.Result.Row {
-		result = construct(stmt, allocator) or_return
-		err = nil
-	} else if err == sqlite3.Result.Done {
-		err = .Not_Found
+	for {
+		err = sqlite3.step(stmt)
+		if err == sqlite3.Result.Row {
+			result = construct(stmt, allocator) or_return
+			err = nil
+			break
+		} else if err == sqlite3.Result.Done {
+			err = .Not_Found
+			break
+		} else if err == sqlite3.Result.Busy {
+			thread.yield()
+		}
 	}
 	return
 }
 
 db_insert_unique :: proc(stmt: sqlite3.Statement) -> (err: Db_Error) {
-	err = sqlite3.step(stmt)
+	for {
+		err = sqlite3.step(stmt)
 
-	if err == sqlite3.Result.Done {
-		err = nil
-	} else if err == sqlite3.Result.Constraint {
-		err = .Exists
+		if err == sqlite3.Result.Done {
+			err = nil
+			break
+		} else if err == sqlite3.Result.Constraint {
+			err = .Exists
+			break
+		} else if err == sqlite3.Result.Busy {
+			thread.yield()
+		}
+	}
+	return
+}
+
+db_step :: proc(stmt: sqlite3.Statement) -> (err: Db_Error) {
+	for {
+		err = sqlite3.step(stmt)
+		if err == sqlite3.Result.Busy {
+			thread.yield()
+		} else {
+			break
+		}
 	}
 	return
 }

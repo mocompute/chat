@@ -46,7 +46,7 @@ config_db_create :: proc(self: ^Config, db: Db) -> (err: Db_Error) {
 	}) or_return
 	defer db_finalize(stmt)
 
-	err = sqlite3.step(stmt)
+	err = db_step(stmt)
 	if err == sqlite3.Result.Done do err = nil
 
 	return
@@ -62,7 +62,7 @@ config_db_retrieve :: proc(db: Db) -> (self: Config, err: Db_Error) {
 	stmt := db_prepare(db, sql) or_return
 	defer db_finalize(stmt)
 
-	err = sqlite3.step(stmt)
+	err = db_step(stmt)
 	if err == sqlite3.Result.Row {
 		db_columns(stmt, row, res[:]) or_return
 
