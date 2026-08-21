@@ -82,7 +82,7 @@ user_db_prepare_statement :: proc(self: ^User, db: Db, sql: cstring) -> (stmt: s
 }
 
 // Allocates to copy username string.
-user_init :: proc(server: Uuid, username, password: string, pepper: []u8, allocator := context.allocator) -> (self: User, err: mem.Allocator_Error) {
+user_init :: proc(self: ^User, server: Uuid, username, password: string, pepper: []u8, allocator := context.allocator) -> (err: mem.Allocator_Error) {
 	crypto.rand_bytes(self.salt[:])
 	argon2id.derive(&argon2id.PARAMS_OWASP, transmute([]u8)password, self.salt[:], self.hashed_password[:], pepper) or_return
 
@@ -102,7 +102,8 @@ user_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(User_Create)
 
-	user, alloc_err := user_init(cmd.server, cmd.username, cmd.password, cmd.pepper[:])
+	user: User
+	alloc_err := user_init(&user, cmd.server, cmd.username, cmd.password, cmd.pepper[:])
 	if alloc_err != nil {
 		task_data.status = .Runtime_Error
 		return
@@ -231,7 +232,8 @@ user_valid_password :: proc(self: User, test_password: string, pepper: []u8) -> 
 @(test)
 test_password :: proc(t: ^testing.T) {
 	server := uuid_v7()
-	user, err := user_init(server, "foo", "bar", {1,2,3,4})
+	user: User
+	err := user_init(&user, server, "foo", "bar", {1,2,3,4})
 	testing.expect(t, err == nil)
 	defer user_deinit(&user)
 

@@ -38,10 +38,11 @@ channel_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator
 	return
 }
 
-channel_deep_copy :: proc(self: Channel, allocator := context.allocator) -> ^Channel {
-	out := new_clone(self)
-	out.name = strings.clone(out.name, allocator)
-	return out
+// Allocates to copy name string
+channel_init :: proc(self: ^Channel, uuid, server: Uuid, name: string, allocator := context.allocator) {
+	self.uuid = uuid
+	self.server = server
+	self.name = strings.clone(name, allocator)
 }
 
 channel_deinit :: proc(self: ^Channel, allocator := context.allocator) {
@@ -55,11 +56,12 @@ channel_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(Channel_Create)
 
-	channel := Channel{uuid=uuid_v7(), server=cmd.server, name=cmd.name}
+	channel: Channel
+	channel_init(&channel, uuid=uuid_v7(), server=cmd.server, name=cmd.name)
 	err := channel_db_create(&channel, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
-		cmd.result = channel_deep_copy(channel)
+		cmd.result = new_clone(channel)
 
 		task_data.result = cmd.result
 		task_data.result_deinit = channel_deinit_rawptr
