@@ -161,7 +161,6 @@ test_user_session_and_channel_create :: proc(t: ^testing.T) {
 
 		session_uuid = refreshed_uuid // for following tests
 	}
-
 	// expect failure, user has wrong role
 	input = {"channel-create", server_uuid, session_uuid, "dazzle"}
 	{
@@ -178,6 +177,18 @@ test_user_session_and_channel_create :: proc(t: ^testing.T) {
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
 		testing.expect_value(t, user.role, User_Role.Create_Channel)
+	}
+	// refresh session so new role takes effect
+	input = {"session-refresh", session_uuid}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		refreshed := cast(^Uuid)td.result.(rawptr)
+		refreshed_uuid := uuid_to_hex(refreshed^, context.temp_allocator)
+		testing.expect(t, refreshed_uuid != session_uuid)
+
+		session_uuid = refreshed_uuid // for following tests
 	}
 	// expect success
 	input = {"channel-create", server_uuid, session_uuid, "dazzle"}

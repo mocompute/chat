@@ -24,6 +24,7 @@ SESSION_MAX_AGE :: 900		// 15 minutes
 
 Session :: struct {
 	user: Uuid,
+	user_role: User_Role,
 	expires: i64,
 }
 
@@ -59,7 +60,7 @@ session_manager_remove :: proc(self: ^Session_Manager, uuid: Uuid) -> (ok: bool)
 	return
 }
 
-session_manager_refresh :: proc(self: ^Session_Manager, uuid: Uuid) -> (refreshed: Uuid, status: Task_Proc_Status) {
+session_manager_refresh :: proc(self: ^Session_Manager, uuid: Uuid, db: Db) -> (refreshed: Uuid, status: Task_Proc_Status) {
 	session: Session
 	ok: bool
 
@@ -67,11 +68,22 @@ session_manager_refresh :: proc(self: ^Session_Manager, uuid: Uuid) -> (refreshe
 	now := unix_time()
 	refreshed = uuid_v4()
 
-	sync.mutex_guard(&self.mutex)
-	session, ok = lru.get(&self.cache, uuid)
+	// load current session and user, without holding lock
+	session, ok = session_manager_lookup(self, uuid)
 	if !ok {
 		return {}, .Not_Found
 	}
+	user, err := user_db_lookup_uuid(tl_db_conn, session.user)
+	defer user_deinit(&user)
+	if err != nil {
+		return {}, .Not_Found
+	}
+
+	// update session from current user role
+	session.user_role = user.role
+
+	// refresh token and update session
+	sync.mutex_guard(&self.mutex)
 
 	if session.expires < now {
 		// Refuse to refresh an expired token. Instead, delete it and return error.
@@ -98,7 +110,7 @@ session_create :: proc(task: Task) {
 	if user_valid_password(user, cmd.password, cmd.pepper[:]) {
 		task_data.status = .Ok
 
-		session := Session{user=user.uuid, expires=unix_time() + SESSION_MAX_AGE}
+		session := Session{user=user.uuid, user_role=user.role, expires=unix_time() + SESSION_MAX_AGE}
 		uuid := uuid_v4()
 		session_manager_insert(cmd.session_manager, uuid, session)
 		task_data.result = cast(rawptr) new_clone(uuid)
@@ -113,7 +125,7 @@ session_refresh :: proc(task: Task) {
 	cmd := task_data.command.(Session_Refresh)
 
 	refreshed: Uuid
-	refreshed, task_data.status = session_manager_refresh(cmd.session_manager, cmd.uuid)
+	refreshed, task_data.status = session_manager_refresh(cmd.session_manager, cmd.uuid, tl_db_conn)
 	if task_data.status == .Ok {
 		task_data.result = cast(rawptr) new_clone(refreshed)
 	}
