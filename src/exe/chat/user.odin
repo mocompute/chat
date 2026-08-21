@@ -42,8 +42,7 @@ User_Create_Table :: `-- sql
 	) WITHOUT ROWID;
 	CREATE UNIQUE INDEX IF NOT EXISTS user_server_username ON user(
 	server, username
-	)
-	`
+	);`
 
 user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: User, err: Db_Error) {
 	res: [User_Cols_N]Db_Value
@@ -66,6 +65,19 @@ user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -
 	copy_exact(self.salt[:], bs)
 
 	self.role = User_Role(res[5].(i64))
+	return
+}
+
+@(require_results)
+user_db_prepare_statement :: proc(self: ^User, db: Db, sql: cstring) -> (stmt: sqlite3.Statement, err: Db_Error) {
+	stmt, err = db_prepare_bind(db, sql, {
+		{":uuid", self.uuid[:]},
+		{":server", self.server[:]},
+		{":username", self.username},
+		{":hashed_password", self.hashed_password[:]},
+		{":salt", self.salt[:]},
+		{":role", i64(self.role)},
+	})
 	return
 }
 
@@ -175,17 +187,6 @@ user_db_update :: proc(self: ^User, db: Db) -> (err: Db_Error) {
 	return db_step(stmt)
 }
 
-user_db_prepare_statement :: proc(self: ^User, db: Db, sql: cstring) -> (stmt: sqlite3.Statement, err: Db_Error) {
-	stmt, err = db_prepare_bind(db, sql, {
-		{":uuid", self.uuid[:]},
-		{":server", self.server[:]},
-		{":username", self.username},
-		{":hashed_password", self.hashed_password[:]},
-		{":salt", self.salt[:]},
-		{":role", i64(self.role)},
-	})
-	return
-}
 
 user_db_lookup_username :: proc(db: Db, server: Uuid, username: string, allocator := context.allocator) -> (self: User, err: Db_Error) {
 	server := server
