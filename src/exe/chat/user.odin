@@ -12,24 +12,33 @@ import "core:testing"
 SALT_BYTES :: argon2id.RECOMMENDED_SALT_SIZE
 KEY_LENGTH :: argon2id.RECOMMENDED_TAG_SIZE
 
+User_Role :: enum {
+	Plain,
+	Create_Channel,
+	Super,
+}
+
 User :: struct {
 	uuid: Uuid,
 	server: Uuid,
 	username: string,
 	hashed_password: [KEY_LENGTH]u8,
 	salt: [SALT_BYTES]u8,
+	role: User_Role,
 }
 
-User_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"username", cstring}, {"hashed_password", []u8}, {"salt", []u8}}
-User_Cols :: "uuid, server, username, hashed_password, salt"
-User_Cols_N :: 5
+User_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"username", cstring}, {"hashed_password", []u8}, {"salt", []u8}, {"role", i64}}
+User_Cols :: "uuid, server, username, hashed_password, salt, role"
+User_Cols_P :: ":uuid, :server, :username, :hashed_password, :salt, :role"
+User_Cols_N :: 6
 User_Create_Table :: `-- sql
 	CREATE TABLE IF NOT EXISTS user(
 	uuid            BLOB PRIMARY KEY,
 	server          BLOB NOT NULL REFERENCES server(uuid) ON DELETE CASCADE,
 	username        TEXT NOT NULL UNIQUE,
 	hashed_password BLOB NOT NULL,
-	salt            BLOB NOT NULL
+	salt            BLOB NOT NULL,
+	role            INTEGER NOT NULL
 	) WITHOUT ROWID;
 	CREATE UNIQUE INDEX IF NOT EXISTS user_server_username ON user(
 	server, username
@@ -55,6 +64,8 @@ user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -
 
 	bs = res[4].([]u8)
 	copy_exact(self.salt[:], bs)
+
+	self.role = User_Role(res[5].(i64))
 	return
 }
 
@@ -112,7 +123,7 @@ user_lookup_uuid :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.query.(User_Lookup_Uuid)
 
-	user, err := user_db_lookup_uuid(tl_db_conn, q.server, q.user, context.allocator)
+	user, err := user_db_lookup_uuid(tl_db_conn, q.user, context.allocator)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(user)
@@ -123,20 +134,57 @@ user_lookup_uuid :: proc(task: Task) {
 	return
 }
 
+user_role_assign :: proc(task: Task) {
+	task_data := task_to_task_data(task)
+	cmd := task_data.command.(User_Role_Assign)
+
+	user, err := user_db_lookup_uuid(tl_db_conn, cmd.user)
+	if err != nil {
+		task_data.status = .Not_Found
+		return
+	}
+
+	user.role = cmd.role
+	err = user_db_update(&user, tl_db_conn)
+	if !is_db_error(err, task_data) {
+		cmd.result = new_clone(user)
+
+		task_data.result = cmd.result
+		task_data.result_deinit = user_deinit_rawptr
+	}
+	return
+}
+
 user_db_create :: proc(self: ^User, db: Db) -> (err: Db_Error) {
 	sql :: `-- sql
-	INSERT INTO user (uuid, server, username, hashed_password, salt)
-	VALUES(:uuid, :server, :username, :hashed_password, :salt);
+	INSERT INTO user (` + User_Cols + `)
+	VALUES(` + User_Cols_P + `);
 	`
-	stmt := db_prepare_bind(db, sql, {
+	stmt := user_db_prepare_statement(self, db, sql) or_return
+	defer db_finalize(stmt)
+	return db_insert_unique(stmt)
+}
+
+user_db_update :: proc(self: ^User, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	UPDATE user SET (` + User_Cols + `) = (` + User_Cols_P + `)
+	WHERE uuid = :uuid;`
+
+	stmt := user_db_prepare_statement(self, db, sql) or_return
+	defer db_finalize(stmt)
+	return db_step(stmt)
+}
+
+user_db_prepare_statement :: proc(self: ^User, db: Db, sql: cstring) -> (stmt: sqlite3.Statement, err: Db_Error) {
+	stmt, err = db_prepare_bind(db, sql, {
 		{":uuid", self.uuid[:]},
 		{":server", self.server[:]},
 		{":username", self.username},
 		{":hashed_password", self.hashed_password[:]},
 		{":salt", self.salt[:]},
-	}) or_return
-	defer db_finalize(stmt)
-	return db_insert_unique(stmt)
+		{":role", i64(self.role)},
+	})
+	return
 }
 
 user_db_lookup_username :: proc(db: Db, server: Uuid, username: string, allocator := context.allocator) -> (self: User, err: Db_Error) {
@@ -153,13 +201,11 @@ user_db_lookup_username :: proc(db: Db, server: Uuid, username: string, allocato
 	return
 }
 
-user_db_lookup_uuid :: proc(db: Db, server: Uuid, user: Uuid, allocator := context.allocator) -> (self: User, err: Db_Error) {
-	server := server
+user_db_lookup_uuid :: proc(db: Db, user: Uuid, allocator := context.allocator) -> (self: User, err: Db_Error) {
 	user := user
-	sql :: `SELECT ` + User_Cols + ` FROM user WHERE server = :server AND uuid = :uuid;`
+	sql :: `SELECT ` + User_Cols + ` FROM user WHERE uuid = :uuid;`
 
 	stmt := db_prepare_bind(db, sql, {
-		{":server", server[:]},
 		{":uuid", user[:]},
 	}) or_return
 	defer db_finalize(stmt)

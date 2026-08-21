@@ -45,6 +45,8 @@ is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (
 	} else if err == .Not_Found {
 		is_error = true
 		task_data.status = .Not_Found
+	} else if err == .Done {
+		task_data.status = .Ok
 	} else if err != nil {
 		is_error = true
 		task_data.status = .Database_Error

@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:strconv"
 
 /*
 
@@ -90,8 +91,12 @@ User_Lookup_Username :: struct {
 	result: ^User,
 }
 User_Lookup_Uuid :: struct {
-	server: Uuid,
 	user: Uuid,
+	result: ^User,
+}
+User_Role_Assign :: struct {
+	user: Uuid,
+	role: User_Role,
 	result: ^User,
 }
 
@@ -110,6 +115,7 @@ Command :: union {
 	Session_Create,
 	Session_Refresh,
 	User_Create,
+	User_Role_Assign,
 }
 Query :: union {
 	Server_Lookup_Name,
@@ -143,7 +149,8 @@ API :: [?]API_Item{
 	{"session-refresh", 1, mk_session_refresh},
 	{"user-create", 3, mk_user_create},
 	{"user-lookup-username", 2, mk_user_lookup_username},
-	{"user-lookup-uuid", 2, mk_user_lookup_uuid},
+	{"user-lookup-uuid", 1, mk_user_lookup_uuid},
+	{"user-role-assign", 2, mk_user_role_assign},
 	{"version", 0, mk_version_get},
 }
 
@@ -232,13 +239,21 @@ mk_user_lookup_username :: proc(words: []string, app: ^App) -> (command: Command
 	return
 }
 mk_user_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	server := words[1]
-	user := words[2]
+	user := words[1]
 
 	ulu: User_Lookup_Uuid
-	ulu.server = _get_uuid(server) or_return
 	ulu.user = _get_uuid(user) or_return
 	query = ulu
+	return
+}
+mk_user_role_assign :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+	user := words[1]
+	role := words[2]
+
+	cmd: User_Role_Assign
+	cmd.user = _get_uuid(user) or_return
+	cmd.role = User_Role(_get_integer(role) or_return)
+	command = cmd
 	return
 }
 
@@ -249,6 +264,14 @@ _get_uuid :: proc(s: string) -> (uuid: Uuid, err: Action_Error) {
 	} else {
 		return {}, .Bad_Argument
 	}
+}
+
+_get_integer :: proc(s: string) -> (i64, Action_Error) {
+	integer, ok := strconv.parse_i64(s)
+	if !ok {
+		return 0, .Bad_Argument
+	}
+	return integer, nil
 }
 
 words_to_action :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
@@ -286,12 +309,13 @@ action_error_to_string :: proc(error: Action_Error) -> (msg: string) {
 action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 	if command != nil {
 		switch _ in command {
-		case Channel_Create:  p = channel_create
-		case Database_Create: p = nil
-		case Server_Create:   p = server_create
-		case Session_Create:  p = session_create
-		case Session_Refresh: p = session_refresh
-		case User_Create:     p = user_create
+		case Channel_Create:    p = channel_create
+		case Database_Create:   p = nil
+		case Server_Create:     p = server_create
+		case Session_Create:    p = session_create
+		case Session_Refresh:   p = session_refresh
+		case User_Create:       p = user_create
+		case User_Role_Assign:  p = user_role_assign
 		}
 
 	} else if query != nil {

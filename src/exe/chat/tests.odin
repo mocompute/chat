@@ -100,14 +100,35 @@ test_user_session_create :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Ok)
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
+		testing.expect_value(t, user.role, User_Role.Plain)
 	}
-	input = {"user-lookup-uuid", server_uuid, user_uuid}
+	input = {"user-lookup-uuid", user_uuid}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
+		testing.expect_value(t, user.role, User_Role.Plain)
+	}
+
+	input = {"user-role-assign", user_uuid, "1"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
+		testing.expect_value(t, user.role, User_Role.Create_Channel)
+	}
+	input = {"user-role-assign", user_uuid, "2"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
+		testing.expect_value(t, user.role, User_Role.Super)
 	}
 
 	session_uuid: string
