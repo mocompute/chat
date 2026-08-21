@@ -56,9 +56,26 @@ channel_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(Channel_Create)
 
+	session, ok := session_manager_lookup(cmd.session_manager, cmd.session)
+	if !ok {
+		task_data.status = .Not_Authorized
+		return
+	}
+
+	user_role, err := user_db_get_role(tl_db_conn, session.user)
+	if err != nil {
+		task_data.status = .Not_Found
+		return
+	}
+
+	if !user_role_can_create_channel(user_role) {
+		task_data.status = .Conflict
+		return
+	}
+
 	channel: Channel
 	channel_init(&channel, uuid=uuid_v7(), server=cmd.server, name=cmd.name)
-	err := channel_db_create(&channel, tl_db_conn)
+	err = channel_db_create(&channel, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
 		cmd.result = new_clone(channel)

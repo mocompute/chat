@@ -20,6 +20,7 @@ Runtime_Error :: enum {
 	Exists,
 	Not_Found,
 	Bad_Argument,
+	Out_Of_Range,
 }
 
 Db_Error :: union #shared_nil {

@@ -30,9 +30,12 @@ to release internal buffers.
 */
 
 Channel_Create :: struct {
+	session: Uuid,
 	server: Uuid,
 	name: string,
 	result: ^Channel,
+
+	session_manager: ^Session_Manager,
 }
 
 Database_Create :: struct {
@@ -141,7 +144,7 @@ API_Item :: struct {
 DB_CREATE_COMMAND :: "db-create"
 API :: [?]API_Item{
 	{DB_CREATE_COMMAND, 1, mk_database_create},
-	{"channel-create", 2, mk_channel_create},
+	{"channel-create", 3, mk_channel_create},
 	{"server-create", 1, mk_server_create},
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
@@ -174,8 +177,10 @@ mk_version_get :: proc(words: []string, app: ^App) -> (command: Command, query: 
 }
 mk_channel_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	server := _get_uuid(words[1]) or_return
-	name := words[2]
-	command = Channel_Create{server=server, name=name}
+	session := _get_uuid(words[2]) or_return
+	name := words[3]
+
+	command = Channel_Create{server=server, session=session, name=name, session_manager=&app.session_manager}
 	return
 }
 mk_database_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {

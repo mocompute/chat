@@ -23,6 +23,7 @@ store in memory.
 SESSION_MAX_AGE :: 900		// 15 minutes
 
 Session :: struct {
+	user: Uuid,
 	expires: i64,
 }
 
@@ -97,7 +98,7 @@ session_create :: proc(task: Task) {
 	if user_valid_password(user, cmd.password, cmd.pepper[:]) {
 		task_data.status = .Ok
 
-		session := Session{expires=unix_time() + SESSION_MAX_AGE}
+		session := Session{user=user.uuid, expires=unix_time() + SESSION_MAX_AGE}
 		uuid := uuid_v4()
 		session_manager_insert(cmd.session_manager, uuid, session)
 		task_data.result = cast(rawptr) new_clone(uuid)

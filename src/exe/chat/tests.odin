@@ -70,7 +70,7 @@ test_server_create_get :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_user_session_create :: proc(t: ^testing.T) {
+test_user_session_and_channel_create :: proc(t: ^testing.T) {
 	app := test_db_init()
 	input: []string = {"server-create", "foo"}
 	server_uuid: string
@@ -131,6 +131,16 @@ test_user_session_create :: proc(t: ^testing.T) {
 		testing.expect_value(t, user.role, User_Role.Super)
 	}
 
+	input = {"user-role-assign", user_uuid, "0"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
+		testing.expect_value(t, user.role, User_Role.Plain)
+	}
+
 	session_uuid: string
 	input = {"session-create", server_uuid, "bar", "baz"}
 	{
@@ -148,8 +158,29 @@ test_user_session_create :: proc(t: ^testing.T) {
 		refreshed := cast(^Uuid)td.result.(rawptr)
 		refreshed_uuid := uuid_to_hex(refreshed^, context.temp_allocator)
 		testing.expect(t, refreshed_uuid != session_uuid)
+
+		session_uuid = refreshed_uuid // for following tests
 	}
-	input = {"channel-create", server_uuid, "dazzle"}
+
+	// expect failure, user has wrong role
+	input = {"channel-create", server_uuid, session_uuid, "dazzle"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Conflict)
+	}
+	// assign create-channel role
+	input = {"user-role-assign", user_uuid, "1"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		user := cast(^User)td.result.(rawptr)
+		testing.expect_value(t, user.username, "bar")
+		testing.expect_value(t, user.role, User_Role.Create_Channel)
+	}
+	// expect success
+	input = {"channel-create", server_uuid, session_uuid, "dazzle"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)

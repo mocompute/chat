@@ -24,6 +24,7 @@ Task_Proc_Status :: enum {
 	Runtime_Error,
 	Conflict,
 	Not_Found,
+	Not_Authorized,
 	Database_Error,
 }
 

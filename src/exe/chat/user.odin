@@ -216,6 +216,31 @@ user_db_lookup_uuid :: proc(db: Db, user: Uuid, allocator := context.allocator) 
 	return
 }
 
+user_db_get_role :: proc(db: Db, user: Uuid) -> (role: User_Role, err: Db_Error) {
+	user := user
+	sql :: `SELECT role FROM user WHERE uuid = :uuid`
+	stmt := db_prepare_bind(db, sql, {
+		{":uuid", user[:]},
+	}) or_return
+	defer db_finalize(stmt)
+
+	role_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (role: User_Role, err: Db_Error) {
+		res: [1]Db_Value
+		db_get_columns(stmt, {{"role", i64}}, res[:]) or_return
+
+		switch res[0].(i64) {
+		case 0: role = .Plain
+		case 1: role = .Create_Channel
+		case 2: role = .Super
+		case: err = .Out_Of_Range
+		}
+		return
+	}
+
+	role = db_retrieve_one(User_Role, stmt, role_from_row) or_return
+	return
+}
+
 user_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 	err = db_exec(db, User_Create_Table)
 	return
@@ -227,6 +252,15 @@ user_valid_password :: proc(self: User, test_password: string, pepper: []u8) -> 
 	err := argon2id.derive(&argon2id.PARAMS_OWASP, transmute([]u8)test_password, salt[:], hashed_password[:], pepper)
 	if err != nil do return false
 	return hashed_password == self.hashed_password
+}
+
+user_role_can_create_channel :: proc(role: User_Role) -> bool {
+	switch role {
+	case .Plain: return false
+	case .Create_Channel: return true
+	case .Super: return true
+	}
+	return false
 }
 
 @(test)
