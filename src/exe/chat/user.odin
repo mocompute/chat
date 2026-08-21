@@ -5,6 +5,7 @@ import "../../../../base/src/lib/sqlite3"
 import "base:intrinsics"
 import "core:crypto"
 import "core:crypto/argon2id"
+import "core:mem"
 import "core:strings"
 import "core:testing"
 
@@ -57,10 +58,14 @@ user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -
 	return
 }
 
-user_deep_copy :: proc(self: User, allocator := context.allocator) -> ^User {
-	out := new_clone(self)
-	out.username = strings.clone(out.username, allocator)
-	return out
+// Allocates to copy username string.
+user_init :: proc(server: Uuid, username, password: string, pepper: []u8, allocator := context.allocator) -> (self: User, err: mem.Allocator_Error) {
+	crypto.rand_bytes(self.salt[:])
+	argon2id.derive(&argon2id.PARAMS_OWASP, transmute([]u8)password, self.salt[:], self.hashed_password[:], pepper) or_return
+
+	self.server = server
+	self.username = strings.clone(username, allocator)
+	return
 }
 
 user_deinit :: proc(self: ^User, allocator := context.allocator) {
@@ -74,15 +79,15 @@ user_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.command.(User_Create)
 
-	user, err := user_hash_create(cmd.server, cmd.username, cmd.password, cmd.pepper[:])
-	if err != nil {
+	user, alloc_err := user_init(cmd.server, cmd.username, cmd.password, cmd.pepper[:])
+	if alloc_err != nil {
 		task_data.status = .Runtime_Error
 		return
 	}
-	err = user_db_create(&user, tl_db_conn)
+	err := user_db_create(&user, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
-		cmd.result = user_deep_copy(user)
+		cmd.result = new_clone(user) // transfers ownership to task
 
 		task_data.result = cmd.result
 		task_data.result_deinit = user_deinit_rawptr
@@ -115,15 +120,6 @@ user_lookup_uuid :: proc(task: Task) {
 		task_data.result = q.result
 		task_data.result_deinit = user_deinit_rawptr
 	}
-	return
-}
-
-user_hash_create :: proc(server: Uuid, username, password: string, pepper: []u8) -> (user: User, err: Db_Error) {
-	user.server = server
-	user.username = username
-	crypto.rand_bytes(user.salt[:])
-
-	argon2id.derive(&argon2id.PARAMS_OWASP, transmute([]u8)password, user.salt[:], user.hashed_password[:], pepper) or_return
 	return
 }
 
@@ -188,8 +184,9 @@ user_valid_password :: proc(self: User, test_password: string, pepper: []u8) -> 
 @(test)
 test_password :: proc(t: ^testing.T) {
 	server := uuid_v7()
-	user, err := user_hash_create(server, "foo", "bar", {1,2,3,4})
+	user, err := user_init(server, "foo", "bar", {1,2,3,4})
 	testing.expect(t, err == nil)
+	defer user_deinit(&user)
 
 	testing.expect_value(t, true, user_valid_password(user, "bar", {1,2,3,4}))
 	testing.expect_value(t, false, user_valid_password(user, "barf", {1,2,3,4}))
