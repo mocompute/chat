@@ -97,6 +97,8 @@ fatal :: proc(message: string, exit := true) {
 _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Task_Data) {
 	command, query, err := words_to_action(words, self)
 	if err == nil {
+		// TODO: everything is serialized at the moment, which makes sense for
+		// the CLI but not the server.
 		td = action_call(&self.command_pool, command, query, self)
 	} else {
 		fatal(fmt.tprintfln("error: %s: '%s'", action_error_to_string(err), words[0]), exit_on_error)

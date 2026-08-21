@@ -13,7 +13,7 @@ Task_Data.status which should be checked by the client before attempting to use 
 optional result value.
 
 Commands and Queries are collectively called 'Actions'. Actions may be cast or called.
-cast returns immediately. The Action will invoke a callback, if any was configured.
+cast returns immediately. The Action will invoke a callback, if any was provided.
 call will queue the Action to the worker pool (or single thread for Command) and will
 busy-wait until the action is complete, then return to the caller.
 
@@ -37,6 +37,8 @@ Channel_Create :: struct {
 
 	session_manager: ^Session_Manager,
 }
+
+
 
 Database_Create :: struct {
 	path: string,
