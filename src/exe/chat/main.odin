@@ -97,8 +97,9 @@ fatal :: proc(message: string, exit := true) {
 _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Task_Data) {
 	command, query, err := words_to_action(words, self)
 	if err == nil {
-		// TODO: everything is serialized at the moment, which makes sense for
-		// the CLI but not the server.
+		if (command != nil && query != nil) || (command == nil && query == nil) {
+			fatal(fmt.tprintfln("fatal: invalid command=%v, query=%v", command, query))
+		}
 		td = action_call(&self.command_pool, command, query, self)
 	} else {
 		fatal(fmt.tprintfln("error: %s: '%s'", action_error_to_string(err), words[0]), exit_on_error)
@@ -127,6 +128,34 @@ _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Tas
 dispatch :: proc(self: ^App, words: []string) -> ^Task_Data {
 	return _dispatch(self, words, exit_on_error=false)
 }
+
+dispatch_async :: proc(self: ^App, words: []string, cb: Task_Callback, cb_data: rawptr = nil, allocator := context.allocator) -> (id: Uuid, err: Task_Proc_Status) {
+	command, query, action_err := words_to_action(words, self)
+	if action_err == nil {
+		if (command != nil && query != nil) || (command == nil && query == nil) {
+			fatal(fmt.tprintfln("fatal: invalid command=%v, query=%v", command, query))
+		}
+		if command != nil {
+			id = action_cast(&self.command_pool, command, nil, self, cb, cb_data)
+		} else if query != nil {
+			id = action_cast(&self.query_pool, nil, query, self, cb, cb_data)
+		} else {
+			td := new(Task_Data)
+			td.status = .Not_Found
+			td.message = fmt.aprintfln("error: not found: '%s'", words[0], allocator=allocator)
+			err = td.status
+			cb(td, cb_data)
+		}
+	} else {
+		td := new(Task_Data)
+		td.status = .Runtime_Error
+		td.message = fmt.aprintfln("error: %s: '%s'", action_error_to_string(action_err), words[0], allocator=allocator)
+		err = td.status
+		cb(td, cb_data)
+	}
+	return
+}
+
 
 main_dispatch :: proc(self: ^App, words: []string) {
 	assert(len(words) > 0)

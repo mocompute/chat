@@ -339,11 +339,12 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 }
 
 // Callback must free task_data AND task_data.message
-action_cast :: proc(task_manager: ^Task_Manager, command: Command, query: Query, app: ^App, callback: Task_Callback ) {
+action_cast :: proc(task_manager: ^Task_Manager, command: Command, query: Query, app: ^App, callback: Task_Callback, callback_data: rawptr) -> (id: Uuid) {
 	task_data, procedure := _create_task(command, query)
 	if !handled_immediate_task(task_data, procedure, command, query) {
-		task_manager_cast(task_manager, procedure, task_data, app, callback)
+		id = task_manager_cast(task_manager, procedure, task_data, app, callback, callback_data)
 	}
+	return
 }
 
 // Caller must free task_data AND task_data.message

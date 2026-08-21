@@ -26,16 +26,31 @@ test_version :: proc(t: ^testing.T) {
 @(test)
 test_server_create_get :: proc(t: ^testing.T) {
 	app := test_db_init()
-	input: []string = {"server-create", "foo"}
-	server_uuid: Uuid
-	{
-		td := dispatch(app, input)
-		defer task_data_destroy(td)
-		testing.expect(t, td.status == .Ok)
 
-		server := cast(^Server)td.result.(rawptr)
-		server_uuid = server.uuid
+	Ctx :: struct {
+		t: ^testing.T,
+		server_uuid: Uuid,
 	}
+	ctx := Ctx{t=t}
+	ctx_ := cast(rawptr)&ctx
+
+	input: []string = {"server-create", "foo"}
+	{
+		f :: proc(td: ^Task_Data, ctx: rawptr) {
+			ctx := cast(^Ctx) ctx
+			t := ctx.t
+			defer task_data_destroy(td)
+
+			testing.expect(t, td.status == .Ok)
+			server := cast(^Server)td.result.(rawptr)
+			ctx.server_uuid = server.uuid
+		}
+		_, err := dispatch_async(app, input, f, ctx_)
+		testing.expect(t, err == nil)
+	}
+
+	// even though this synchronous task is immediately invoked after the async
+	// create above, it should still fail due to command serialization.
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
@@ -44,12 +59,16 @@ test_server_create_get :: proc(t: ^testing.T) {
 
 	input = {"server-lookup-name", "foo"}
 	{
-		td := dispatch(app, input)
-		defer task_data_destroy(td)
+		f :: proc(td: ^Task_Data, ctx: rawptr) {
+			ctx := cast(^Ctx) ctx
+			t := ctx.t
+			defer task_data_destroy(td)
 
-		testing.expect(t, td.status == .Ok)
-		server := cast(^Server)td.result.(rawptr)
-		testing.expect_value(t, server.uuid, server_uuid)
+			testing.expect(t, td.status == .Ok)
+			server := cast(^Server)td.result.(rawptr)
+			testing.expect_value(t, server.uuid, ctx.server_uuid)
+		}
+		dispatch_async(app, input, f, ctx_)
 	}
 	input = {"server-lookup-name", "nonexistent"}
 	{
@@ -58,14 +77,14 @@ test_server_create_get :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Not_Found)
 	}
 
-	uuid_hex := uuid_to_hex(server_uuid, context.temp_allocator)
+	uuid_hex := uuid_to_hex(ctx.server_uuid, context.temp_allocator)
 	input = {"server-lookup-uuid", uuid_hex}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
 		server := cast(^Server)td.result.(rawptr)
-		testing.expect_value(t, server.uuid, server_uuid)
+		testing.expect_value(t, server.uuid, ctx.server_uuid)
 	}
 }
 
