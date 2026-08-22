@@ -198,7 +198,8 @@ task_manager_remove_task :: proc(self: ^Task_Manager, id: Uuid) {
 	}
 }
 
-
+// Intended use: at the top of a task handler, to obtain the task data and queue up a
+// callback before exiting the scope.
 @(deferred_out=deferred_task_data_callback)
 task_to_task_data :: proc(task: Task) -> (td: ^Task_Data) {
 	td = cast(^Task_Data) task.data
