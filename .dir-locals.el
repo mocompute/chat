@@ -1,5 +1,6 @@
 ((nil . ((indent-tabs-mode . t)
 	 (tab-width . 8)
 	 (fill-column . 88)))
- (sh-mode . ((tab-width . 8)
+ (sh-mode . ((indent-tabs-mode . t)
+	     (tab-width . 8)
 	     (sh-basic-offset . 8))))
