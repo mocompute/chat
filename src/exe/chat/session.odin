@@ -1,6 +1,7 @@
 package main
 
 import "core:container/lru"
+import "core:fmt"
 import "core:mem"
 import "core:sync"
 
@@ -104,6 +105,7 @@ session_create :: proc(task: Task) {
 	defer user_deinit(&user)
 	if err != nil {
 		task_data.status = .Not_Found
+		task_data.message = fmt.aprintf("'%s::%s' not found", uuid_to_hex(cmd.server), cmd.username)
 		return
 	}
 
@@ -116,6 +118,7 @@ session_create :: proc(task: Task) {
 		task_data.result = cast(rawptr) new_clone(uuid)
 	} else {
 		task_data.status = .Conflict
+		task_data.message = fmt.aprintf("invalid username/password")
 	}
 	return
 }

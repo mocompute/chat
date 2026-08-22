@@ -34,27 +34,54 @@ test_server_create_get :: proc(t: ^testing.T) {
 	ctx := Ctx{t=t}
 	ctx_ := cast(rawptr)&ctx
 
-	input: []string = {"server-create", "foo"}
-	{
-		f :: proc(td: ^Task_Data, ctx: rawptr) {
-			ctx := cast(^Ctx) ctx
-			t := ctx.t
-			defer task_data_destroy(td)
 
-			testing.expect(t, td.status == .Ok)
-			server := cast(^Server)td.result.(rawptr)
-			ctx.server_uuid = server.uuid
-		}
-		_, err := dispatch_async(app, input, f, ctx_)
-		testing.expect(t, err == nil)
-	}
-
-	// even though this synchronous task is immediately invoked after the async
-	// create above, it should still fail due to command serialization.
+	session_uuid: string
+	input: []string = {"user-create", "", "super", "pass"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
-		testing.expect(t, td.status == .Conflict)
+		testing.expect(t, td.status == .Ok)
+	}
+	input = {"session-create", "", "super", "pass"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		session := cast(^Uuid)td.result.(rawptr)
+		session_uuid = uuid_to_hex(session^, context.temp_allocator)
+	}
+
+	input = {"server-create", session_uuid, "foo"}
+	{
+		tm: ^Task_Manager
+		id: Uuid
+		{
+			f :: proc(td: ^Task_Data, ctx: rawptr) {
+				ctx := cast(^Ctx) ctx
+				t := ctx.t
+				defer task_data_destroy(td)
+
+				testing.expect(t, td.status == .Ok)
+				server := cast(^Server)td.result.(rawptr)
+				ctx.server_uuid = server.uuid
+			}
+			err: Task_Proc_Status
+			tm, id, err = dispatch_async(app, input, f, ctx_)
+			testing.expect(t, err == nil)
+
+		}
+
+		// even though this synchronous task is immediately invoked before the async
+		// create above has (probably) had a chance to complete, it should still fail
+		// due to command serialization.
+		{
+			td := dispatch(app, input)
+			defer task_data_destroy(td)
+			testing.expect(t, td.status == .Conflict)
+		}
+
+		// busy-wait before proceeding to next test
+		task_manager_busy_wait(tm, id)
 	}
 
 	input = {"server-lookup-name", "foo"}
@@ -91,7 +118,24 @@ test_server_create_get :: proc(t: ^testing.T) {
 @(test)
 test_user_session_and_channel_create :: proc(t: ^testing.T) {
 	app := test_db_init()
-	input: []string = {"server-create", "foo"}
+
+	session_uuid: string
+	input: []string = {"user-create", "", "super", "pass"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+	}
+	input = {"session-create", "", "super", "pass"}
+	{
+		td := dispatch(app, input)
+		defer task_data_destroy(td)
+		testing.expect(t, td.status == .Ok)
+		session := cast(^Uuid)td.result.(rawptr)
+		session_uuid = uuid_to_hex(session^, context.temp_allocator)
+	}
+
+	input = {"server-create", session_uuid, "foo"}
 	server_uuid: string
 	{
 		td := dispatch(app, input)
@@ -131,7 +175,7 @@ test_user_session_and_channel_create :: proc(t: ^testing.T) {
 		testing.expect_value(t, user.role, User_Role.Plain)
 	}
 
-	input = {"user-role-assign", user_uuid, "1"}
+	input = {"user-role-assign", user_uuid, "create-channel"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
@@ -140,17 +184,17 @@ test_user_session_and_channel_create :: proc(t: ^testing.T) {
 		testing.expect_value(t, user.username, "bar")
 		testing.expect_value(t, user.role, User_Role.Create_Channel)
 	}
-	input = {"user-role-assign", user_uuid, "2"}
+	input = {"user-role-assign", user_uuid, "create-server"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
 		testing.expect(t, td.status == .Ok)
 		user := cast(^User)td.result.(rawptr)
 		testing.expect_value(t, user.username, "bar")
-		testing.expect_value(t, user.role, User_Role.Super)
+		testing.expect_value(t, user.role, User_Role.Create_Server)
 	}
 
-	input = {"user-role-assign", user_uuid, "0"}
+	input = {"user-role-assign", user_uuid, "plain"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)
@@ -160,7 +204,6 @@ test_user_session_and_channel_create :: proc(t: ^testing.T) {
 		testing.expect_value(t, user.role, User_Role.Plain)
 	}
 
-	session_uuid: string
 	input = {"session-create", server_uuid, "bar", "baz"}
 	{
 		td := dispatch(app, input)
@@ -188,7 +231,7 @@ test_user_session_and_channel_create :: proc(t: ^testing.T) {
 		testing.expect(t, td.status == .Conflict)
 	}
 	// assign create-channel role
-	input = {"user-role-assign", user_uuid, "1"}
+	input = {"user-role-assign", user_uuid, "create-channel"}
 	{
 		td := dispatch(app, input)
 		defer task_data_destroy(td)

@@ -129,16 +129,18 @@ dispatch :: proc(self: ^App, words: []string) -> ^Task_Data {
 	return _dispatch(self, words, exit_on_error=false)
 }
 
-dispatch_async :: proc(self: ^App, words: []string, cb: Task_Callback, cb_data: rawptr = nil, allocator := context.allocator) -> (id: Uuid, err: Task_Proc_Status) {
+dispatch_async :: proc(self: ^App, words: []string, cb: Task_Callback, cb_data: rawptr = nil, allocator := context.allocator) -> (task_manager: ^Task_Manager, id: Uuid, err: Task_Proc_Status) {
 	command, query, action_err := words_to_action(words, self)
 	if action_err == nil {
 		if (command != nil && query != nil) || (command == nil && query == nil) {
 			fatal(fmt.tprintfln("fatal: invalid command=%v, query=%v", command, query))
 		}
 		if command != nil {
-			id = action_cast(&self.command_pool, command, nil, self, cb, cb_data)
+			task_manager = &self.command_pool
+			id = action_cast(task_manager, command, nil, self, cb, cb_data)
 		} else if query != nil {
-			id = action_cast(&self.query_pool, nil, query, self, cb, cb_data)
+			task_manager = &self.query_pool
+			id = action_cast(task_manager, nil, query, self, cb, cb_data)
 		} else {
 			td := new(Task_Data)
 			td.status = .Not_Found

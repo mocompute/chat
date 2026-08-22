@@ -18,6 +18,7 @@ Logic_Error :: enum {
 Runtime_Error :: enum {
 	None,
 	Exists,
+	Constraint_Failed,
 	Not_Found,
 	Bad_Argument,
 	Out_Of_Range,

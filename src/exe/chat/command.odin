@@ -27,6 +27,12 @@ Lifetimes: task results which are placed in Task_Data.result.(rawptr) will be fr
 the command processor. An optional deinit proc can be placed in Task_Data.result_deinit
 to release internal buffers.
 
+Authentication
+
+Many Actions require correct privileges to be executed. We use a Session system: clients
+provide authentication and are issued an expiring token (a Uuid). The token caches the
+user's privileges. Actions which require privileges require a session Uuid.
+
 */
 
 Channel_Create :: struct {
@@ -47,6 +53,7 @@ Database_Create :: struct {
 
 
 Server_Create :: struct {
+	session: Uuid,
 	name: string,
 	result: ^Server,
 }
@@ -147,7 +154,7 @@ DB_CREATE_COMMAND :: "db-create"
 API :: [?]API_Item{
 	{DB_CREATE_COMMAND, 1, mk_database_create},
 	{"channel-create", 3, mk_channel_create},
-	{"server-create", 1, mk_server_create},
+	{"server-create", 2, mk_server_create},
 	{"server-lookup-name", 1, mk_server_lookup_name},
 	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
 	{"session-create", 3, mk_session_create},
@@ -190,7 +197,10 @@ mk_database_create :: proc(words: []string, app: ^App) -> (command: Command, que
 	return
 }
 mk_server_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	command = Server_Create{name=words[1]}
+	sc: Server_Create
+	sc.session = _get_uuid(words[1]) or_return
+	sc.name = words[2]
+	command = sc
 	return
 }
 mk_server_lookup_name :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
@@ -255,16 +265,25 @@ mk_user_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, qu
 }
 mk_user_role_assign :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
 	user := words[1]
-	role := words[2]
+	role, ok := user_role_from_string(words[2])
+	if !ok {
+		err = .Bad_Argument
+		return
+	}
 
 	cmd: User_Role_Assign
 	cmd.user = _get_uuid(user) or_return
-	cmd.role = User_Role(_get_integer(role) or_return)
+	cmd.role = User_Role(role)
 	command = cmd
 	return
 }
 
 _get_uuid :: proc(s: string) -> (uuid: Uuid, err: Action_Error) {
+	if s == "" {
+		// null uuid
+		return {}, nil
+	}
+
 	ok: bool
 	if uuid, ok = uuid_from_hex(s); ok {
 		return uuid, nil

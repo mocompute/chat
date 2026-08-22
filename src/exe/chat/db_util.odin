@@ -125,11 +125,15 @@ db_insert_unique :: proc(stmt: sqlite3.Statement) -> (err: Db_Error) {
 			err = nil
 			break
 		} else if err == sqlite3.Result.Constraint {
-			err = .Exists
+			fmt.eprintln("error: db_insert_unique: ", sqlite3.errmsg(sqlite3.db_handle(stmt)))
+			err = .Constraint_Failed
 			break
 		} else if err == sqlite3.Result.Busy {
 			thread.yield()
+		} else if err != nil {
+			fmt.eprintln("error: db_insert_unique: ", sqlite3.errmsg(sqlite3.db_handle(stmt)))
 		}
+
 	}
 	return
 }

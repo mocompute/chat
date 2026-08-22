@@ -36,15 +36,18 @@ server_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
 }
 
 is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (is_error: bool) {
-	if err == .Exists {
+	if err == .Exists || err == .Constraint_Failed {
 		is_error = true
 		task_data.status = .Conflict
 		if key != "" {
-			task_data.message = fmt.aprintf("'%s' exists", key)
+			task_data.message = fmt.aprintf("constraint failed on '%s'", key)
 		}
 	} else if err == .Not_Found {
 		is_error = true
 		task_data.status = .Not_Found
+		if key != "" {
+			task_data.message = fmt.aprintf("'%s' not found", key)
+		}
 	} else if err == .Done {
 		task_data.status = .Ok
 	} else if err != nil {
@@ -53,6 +56,10 @@ is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (
 		task_data.message = fmt.aprintf("database error: %s", err)
 	} else {
 		task_data.status = .Ok
+	}
+
+	if task_data.status != .Ok && task_data.message == "" {
+		task_data.message = fmt.aprintf("%v", err)
 	}
 	return
 }
@@ -63,7 +70,7 @@ server_create :: proc(task: Task) {
 
 	server := Server{name=cmd.name, uuid=uuid_v7()}
 	err := server_db_create(&server, tl_db_conn)
-	if !is_db_error(err, task_data) {
+	if !is_db_error(err, task_data, cmd.name) {
 		cmd.result = server_deep_copy(server)
 		task_data.result = cmd.result
 		task_data.result_deinit = server_deinit_rawptr
@@ -104,6 +111,7 @@ server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
 	uuid BLOB PRIMARY KEY,
 	name TEXT NOT NULL UNIQUE
 	) WITHOUT ROWID;
+	INSERT INTO server (uuid, name) VALUES (X'00000000000000000000000000000000', 'null');
 	`
 	err = db_exec(db, sql)
 	return

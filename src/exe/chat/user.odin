@@ -5,6 +5,7 @@ import "../../../../base/src/lib/sqlite3"
 import "base:intrinsics"
 import "core:crypto"
 import "core:crypto/argon2id"
+import "core:fmt"
 import "core:mem"
 import "core:strings"
 import "core:testing"
@@ -15,6 +16,7 @@ KEY_LENGTH :: argon2id.RECOMMENDED_TAG_SIZE
 User_Role :: enum {
 	Plain,
 	Create_Channel,
+	Create_Server,
 	Super,
 }
 
@@ -87,6 +89,7 @@ user_init :: proc(self: ^User, server: Uuid, username, password: string, pepper:
 	argon2id.derive(&argon2id.PARAMS_OWASP, transmute([]u8)password, self.salt[:], self.hashed_password[:], pepper) or_return
 
 	self.server = server
+	self.uuid = uuid_v7()
 	self.username = strings.clone(username, allocator)
 	return
 }
@@ -106,11 +109,12 @@ user_create :: proc(task: Task) {
 	alloc_err := user_init(&user, cmd.server, cmd.username, cmd.password, cmd.pepper[:])
 	if alloc_err != nil {
 		task_data.status = .Runtime_Error
+		task_data.message = fmt.aprintf("%v", alloc_err)
 		return
 	}
 	err := user_db_create(&user, tl_db_conn)
 
-	if !is_db_error(err, task_data) {
+	if !is_db_error(err, task_data, cmd.username) {
 		cmd.result = new_clone(user) // transfers ownership to task
 
 		task_data.result = cmd.result
@@ -228,16 +232,45 @@ user_db_get_role :: proc(db: Db, user: Uuid) -> (role: User_Role, err: Db_Error)
 		res: [1]Db_Value
 		db_get_columns(stmt, {{"role", i64}}, res[:]) or_return
 
-		switch res[0].(i64) {
-		case 0: role = .Plain
-		case 1: role = .Create_Channel
-		case 2: role = .Super
-		case: err = .Out_Of_Range
+		ok: bool
+		role, ok = user_role_from_i64(res[0].(i64))
+		if !ok {
+			err = .Out_Of_Range
 		}
 		return
 	}
 
 	role = db_retrieve_one(User_Role, stmt, role_from_row) or_return
+	return
+}
+
+user_role_to_i64 :: proc(role: User_Role) -> (result: i64, ok: bool) {
+	switch role {
+	case .Plain: return 0, true
+	case .Create_Channel: return 1, true
+	case .Create_Server: return 2, true
+	case .Super: return 3, true
+	}
+	return
+}
+
+user_role_from_i64 :: proc(index: i64) -> (result: User_Role, ok: bool) {
+	switch index {
+	case 0: return .Plain, true
+	case 1: return .Create_Channel, true
+	case 2: return .Create_Server, true
+	case 3: return .Super, true
+	}
+	return
+}
+
+user_role_from_string :: proc(s: string) -> (result: User_Role, ok: bool) {
+	switch s {
+	case "plain": return .Plain, true
+	case "create-channel": return .Create_Channel, true
+	case "create-server": return .Create_Server, true
+	case "super": return .Super, true
+	}
 	return
 }
 
@@ -258,6 +291,7 @@ user_role_can_create_channel :: proc(role: User_Role) -> bool {
 	switch role {
 	case .Plain: return false
 	case .Create_Channel: return true
+	case .Create_Server: return true
 	case .Super: return true
 	}
 	return false
