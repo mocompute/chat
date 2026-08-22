@@ -172,6 +172,7 @@ task_manager_busy_wait :: proc(self: ^Task_Manager, id: Uuid) -> (result: ^Task_
 		got_task := false
 		for got_task == false {
 			task, got_task = thread.pool_pop_done(&self.pool)
+			thread.yield()
 		}
 
 		task_data := cast(^Task_Data) task.data
@@ -186,9 +187,7 @@ task_manager_busy_wait :: proc(self: ^Task_Manager, id: Uuid) -> (result: ^Task_
 				ticket.status = .Done
 				self.tickets[task_data.id] = ticket
 			}
-
 		}
-
 		thread.yield()
 	}
 }
