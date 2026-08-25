@@ -278,6 +278,13 @@ while [ $# -gt 0 ]; do
 			exit $?
 			;;
 
+		"odin" )
+			n=$(shift_past_dash_dash "$@")
+			shift "$n"
+			"$ODIN" "$@"
+			exit $?
+			;;
+
 		"run" )
 			if [ -n "${2:-}" ]; then
 				progname="$2"
