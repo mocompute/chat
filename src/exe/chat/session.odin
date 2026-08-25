@@ -74,7 +74,9 @@ session_manager_refresh :: proc(self: ^Session_Manager, uuid: Uuid, db: Db) -> (
 	if !ok {
 		return {}, .Not_Found
 	}
-	user, err := user_db_lookup_uuid(tl_db_conn, session.user)
+
+	user := User{uuid=session.user}
+	err := user_load_uuid(&user, tl_db_conn)
 	defer user_deinit(&user)
 	if err != nil {
 		return {}, .Not_Found
@@ -101,7 +103,8 @@ session_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.action.(Command).(Session_Create)
 
-	user, err := user_db_lookup_username(tl_db_conn, cmd.server, cmd.username)
+	user := User{server=cmd.server, username=cmd.username}
+	err := user_load_username(&user, tl_db_conn)
 	defer user_deinit(&user)
 	if err != nil {
 		task_data.status = .Not_Found

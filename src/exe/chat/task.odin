@@ -1,6 +1,6 @@
 package main
 
-import "core:mem"
+import "core:fmt"
 import "core:os"
 import "core:sync"
 import "core:thread"
@@ -37,7 +37,7 @@ Task_Data :: struct {
 		rawptr,		// will be freed by task_data_destroy
 		i64,
 	},
-	result_deinit: proc(rawptr, mem.Allocator), // called before free of result.rawptr
+	result_deinit: proc(rawptr), // called before free of result.rawptr
 
 	message: string,
 	status: Task_Proc_Status,
@@ -81,7 +81,7 @@ task_data_destroy :: proc(self: ^Task_Data) {
 	delete(self.message)
 	if v, ok := self.result.(rawptr); ok {
 		if self.result_deinit != nil {
-			self.result_deinit(v, context.allocator)
+			self.result_deinit(v)
 		}
 		free(v)
 	}
@@ -207,4 +207,34 @@ task_to_task_data :: proc(task: Task) -> (td: ^Task_Data) {
 
 deferred_task_data_callback :: proc(td: ^Task_Data) {
 	if td.callback != nil do td.callback(td, td.callback_data)
+}
+
+
+is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (is_error: bool) {
+	if err == .Exists || err == .Constraint {
+		is_error = true
+		task_data.status = .Conflict
+		if key != "" {
+			task_data.message = fmt.aprintf("constraint failed on '%s'", key)
+		}
+	} else if err == .Not_Found {
+		is_error = true
+		task_data.status = .Not_Found
+		if key != "" {
+			task_data.message = fmt.aprintf("'%s' not found", key)
+		}
+	} else if err == .Done {
+		task_data.status = .Ok
+	} else if err != nil {
+		is_error = true
+		task_data.status = .Database_Error
+		task_data.message = fmt.aprintf("database error: %s", err)
+	} else {
+		task_data.status = .Ok
+	}
+
+	if task_data.status != .Ok && task_data.message == "" {
+		task_data.message = fmt.aprintf("%v", err)
+	}
+	return
 }

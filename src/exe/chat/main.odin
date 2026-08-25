@@ -40,9 +40,10 @@ app_open_db :: proc(self: ^App, db_path: string) {
 		conn, err := db_open_multi_threaded(db_path_c)
 		defer db_close(conn)
 
-		self.config, err = config_db_retrieve(conn)
+		self.config.id = 1
+		err = config_load(&self.config, conn)
 		if err != nil {
-			panic("fatal: unable to read configuration. Does the database exist?")
+			panic(fmt.tprintf("fatal: unable to read configuration. Does the database exist? (%v)", err))
 		}
 	}
 
@@ -76,10 +77,11 @@ create_db :: proc(path: string) -> (err: Db_Error) {
 	db := db_open(path_c) or_return
 	defer db_close(db)
 
-	db_config(db) or_return
 	db_create_tables(db) or_return
-	config := config_create()
-	config_db_create(&config, db) or_return
+
+	config: Config
+	config_init(&config)
+	config_save(config, db) or_return
 	return
 }
 

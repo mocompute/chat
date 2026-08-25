@@ -18,10 +18,10 @@ Logic_Error :: enum {
 Runtime_Error :: enum {
 	None,
 	Exists,
-	Constraint_Failed,
 	Not_Found,
 	Bad_Argument,
 	Out_Of_Range,
+	Timeout,
 }
 
 Db_Error :: union #shared_nil {
@@ -104,9 +104,6 @@ db_close :: proc(db: Db) -> (err: Db_Error) {
 	return
 }
 
-db_config :: proc(db: Db) -> (err: Db_Error) {
-	return
-}
 
 @(require_results)
 db_prepare :: proc(db: Db, sql: cstring) -> (stmt: sqlite3.Statement, err: Db_Error) {
@@ -155,9 +152,9 @@ db_exec_one_row :: proc(db: Db, sql: cstring, cb: Db_Statement_Callback, loc := 
 }
 
 db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	config_db_create_tables(db) or_return
-	server_db_create_tables(db) or_return
-	user_db_create_tables(db) or_return
-	channel_db_create_tables(db) or_return
+	db_exec(db, Config_Create_Table) or_return
+	db_exec(db, Server_Create_Table) or_return
+	db_exec(db, User_Create_Table) or_return
+	db_exec(db, Channel_Create_Table) or_return
 	return
 }

@@ -29,10 +29,6 @@ User :: struct {
 	role: User_Role,
 }
 
-User_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"username", cstring}, {"hashed_password", []u8}, {"salt", []u8}, {"role", i64}}
-User_Cols :: "uuid, server, username, hashed_password, salt, role"
-User_Cols_P :: ":uuid, :server, :username, :hashed_password, :salt, :role"
-User_Cols_N :: 6
 User_Create_Table :: `-- sql
 	CREATE TABLE IF NOT EXISTS user(
 	uuid            BLOB PRIMARY KEY,
@@ -46,59 +42,94 @@ User_Create_Table :: `-- sql
 	server, username
 	);`
 
-user_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: User, err: Db_Error) {
-	res: [User_Cols_N]Db_Value
-	db_get_columns(stmt, User_Row, res[:]) or_return
-
-	bs: []u8
-	bs = res[0].([]u8)
-	copy_exact(self.uuid[:], bs)
-
-	bs = res[1].([]u8)
-	copy_exact(self.server[:], bs)
-
-	// stmt will be finalized, so we need to clone
-	self.username = strings.clone_from_cstring(res[2].(cstring), allocator)
-
-	bs = res[3].([]u8)
-	copy_exact(self.hashed_password[:], bs)
-
-	bs = res[4].([]u8)
-	copy_exact(self.salt[:], bs)
-
-	self.role = User_Role(res[5].(i64))
+user_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	switch self in obj {
+	case ^User:
+		err = db_scan_columns(stmt, {
+			{"uuid", self.uuid[:]},
+			{"server", self.server[:]},
+			{"username", &self.username},
+			{"hashed_password", self.hashed_password[:]},
+			{"salt", self.salt[:]},
+			{"role", cast(^int)(&self.role)},
+		})
+	case:
+		panic(fmt.tprintf("user_from_row: bad type %v", obj))
+	}
 	return
 }
 
-@(require_results)
-user_db_prepare_statement :: proc(self: ^User, db: Db, sql: cstring) -> (stmt: sqlite3.Statement, err: Db_Error) {
-	stmt, err = db_prepare_bind(db, sql, {
-		{":uuid", self.uuid[:]},
-		{":server", self.server[:]},
-		{":username", self.username},
-		{":hashed_password", self.hashed_password[:]},
-		{":salt", self.salt[:]},
-		{":role", i64(self.role)},
-	})
+user_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	switch self in obj {
+	case User:
+		uuid := self.uuid
+		server := self.server
+		hashed_password := self.hashed_password
+		salt := self.salt
+		err = db_bind(stmt, {
+			{":uuid", uuid[:]},
+			{":server", server[:]},
+			{":username", self.username},
+			{":hashed_password", hashed_password[:]},
+			{":salt", salt[:]},
+			{":role", int(self.role)},
+		})
+	case:
+		panic(fmt.tprintf("user_to_row: bad type %v", obj))
+	}
 	return
 }
 
-// Allocates to copy username string.
-user_init :: proc(self: ^User, server: Uuid, username, password: string, pepper: []u8, allocator := context.allocator) -> (err: mem.Allocator_Error) {
+// Allocates to copy username string. Argon may return allocator error.
+user_init :: proc(self: ^User, server: Uuid, username, password: string, pepper: []u8) -> (err: mem.Allocator_Error) {
 	crypto.rand_bytes(self.salt[:])
 	argon2id.derive(&argon2id.PARAMS_OWASP, transmute([]u8)password, self.salt[:], self.hashed_password[:], pepper) or_return
 
 	self.server = server
 	self.uuid = uuid_v7()
-	self.username = strings.clone(username, allocator)
+	self.username = strings.clone(username)
 	return
 }
 
-user_deinit :: proc(self: ^User, allocator := context.allocator) {
-	delete(self.username, allocator)
+user_deinit :: proc(self: ^User) {
+	delete(self.username)
 }
-user_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
-	user_deinit(cast(^User)self, allocator)
+user_deinit_rawptr :: proc(self: rawptr) {
+	user_deinit(cast(^User)self)
+}
+
+user_save :: proc(self: User, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	INSERT OR REPLACE INTO user(uuid, server, username, hashed_password, salt, role)
+	VALUES(:uuid, :server, :username, :hashed_password, :salt, :role);
+	`
+	stmt: sqlite3.Statement
+	stmt = db_prepare_bind_row(db, sql, self, user_to_row) or_return
+	db_step_and_finalize_default_timeout(stmt) or_return
+	return
+}
+
+
+
+user_load_uuid :: proc(self: ^User, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	SELECT * FROM user WHERE uuid = :uuid;`
+	return user_load_(self, db, sql)
+}
+
+user_load_username :: proc(self: ^User, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	SELECT * FROM user WHERE username = :username;`
+	return user_load_(self, db, sql)
+}
+
+user_load_ :: proc(self: ^User, db: Db, sql: cstring) -> (err: Db_Error) {
+	stmt: sqlite3.Statement
+
+	// set sql params required by sql from self
+	stmt = db_prepare_bind_row(db, sql, self^, user_to_row) or_return
+	db_retrieve_one_and_finalize_default_timeout(stmt, self, user_from_row) or_return
+	return
 }
 
 user_create :: proc(task: Task) {
@@ -112,7 +143,7 @@ user_create :: proc(task: Task) {
 		task_data.message = fmt.aprintf("%v", alloc_err)
 		return
 	}
-	err := user_db_create(&user, tl_db_conn)
+	err := user_save(user, tl_db_conn)
 
 	if !is_db_error(err, task_data, cmd.username) {
 		cmd.result = new_clone(user) // transfers ownership to task
@@ -122,11 +153,13 @@ user_create :: proc(task: Task) {
 	}
 }
 
+
 user_lookup_username :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.action.(Query).(User_Lookup_Username)
 
-	user, err := user_db_lookup_username(tl_db_conn, q.server, q.username, context.allocator)
+	user := User{server=q.server, username=q.username}
+	err := user_load_username(&user, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(user)
@@ -136,11 +169,13 @@ user_lookup_username :: proc(task: Task) {
 	}
 	return
 }
+
 user_lookup_uuid :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.action.(Query).(User_Lookup_Uuid)
 
-	user, err := user_db_lookup_uuid(tl_db_conn, q.user, context.allocator)
+	user := User{uuid=q.user}
+	err := user_load_uuid(&user, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(user)
@@ -155,92 +190,21 @@ user_role_assign :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	cmd := task_data.action.(Command).(User_Role_Assign)
 
-	user, err := user_db_lookup_uuid(tl_db_conn, cmd.user)
+	user := User{uuid=cmd.user}
+	err := user_load_uuid(&user, tl_db_conn)
 	if err != nil {
 		task_data.status = .Not_Found
 		return
 	}
 
 	user.role = cmd.role
-	err = user_db_update(&user, tl_db_conn)
+	err = user_save(user, tl_db_conn)
 	if !is_db_error(err, task_data) {
 		cmd.result = new_clone(user)
 
 		task_data.result = cmd.result
 		task_data.result_deinit = user_deinit_rawptr
 	}
-	return
-}
-
-user_db_create :: proc(self: ^User, db: Db) -> (err: Db_Error) {
-	sql :: `-- sql
-	INSERT INTO user (` + User_Cols + `)
-	VALUES(` + User_Cols_P + `);
-	`
-	stmt := user_db_prepare_statement(self, db, sql) or_return
-	defer db_finalize(stmt)
-	return db_insert_unique(stmt)
-}
-
-user_db_update :: proc(self: ^User, db: Db) -> (err: Db_Error) {
-	sql :: `-- sql
-	UPDATE user SET (` + User_Cols + `) = (` + User_Cols_P + `)
-	WHERE uuid = :uuid;`
-
-	stmt := user_db_prepare_statement(self, db, sql) or_return
-	defer db_finalize(stmt)
-	return db_step(stmt)
-}
-
-
-user_db_lookup_username :: proc(db: Db, server: Uuid, username: string, allocator := context.allocator) -> (self: User, err: Db_Error) {
-	server := server
-	sql :: `SELECT ` + User_Cols + ` FROM user WHERE server = :server AND username = :username;`
-
-	stmt := db_prepare_bind(db, sql, {
-		{":server", server[:]},
-		{":username", username},
-	}) or_return
-	defer db_finalize(stmt)
-
-	self = db_retrieve_one(User, stmt, user_from_row, allocator) or_return
-	return
-}
-
-user_db_lookup_uuid :: proc(db: Db, user: Uuid, allocator := context.allocator) -> (self: User, err: Db_Error) {
-	user := user
-	sql :: `SELECT ` + User_Cols + ` FROM user WHERE uuid = :uuid;`
-
-	stmt := db_prepare_bind(db, sql, {
-		{":uuid", user[:]},
-	}) or_return
-	defer db_finalize(stmt)
-
-	self = db_retrieve_one(User, stmt, user_from_row, allocator) or_return
-	return
-}
-
-user_db_get_role :: proc(db: Db, user: Uuid) -> (role: User_Role, err: Db_Error) {
-	user := user
-	sql :: `SELECT role FROM user WHERE uuid = :uuid`
-	stmt := db_prepare_bind(db, sql, {
-		{":uuid", user[:]},
-	}) or_return
-	defer db_finalize(stmt)
-
-	role_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (role: User_Role, err: Db_Error) {
-		res: [1]Db_Value
-		db_get_columns(stmt, {{"role", i64}}, res[:]) or_return
-
-		ok: bool
-		role, ok = user_role_from_i64(res[0].(i64))
-		if !ok {
-			err = .Out_Of_Range
-		}
-		return
-	}
-
-	role = db_retrieve_one(User_Role, stmt, role_from_row) or_return
 	return
 }
 
@@ -271,11 +235,6 @@ user_role_from_string :: proc(s: string) -> (result: User_Role, ok: bool) {
 	case "create-server": return .Create_Server, true
 	case "super": return .Super, true
 	}
-	return
-}
-
-user_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	err = db_exec(db, User_Create_Table)
 	return
 }
 

@@ -2,6 +2,7 @@ package main
 
 import "../../../../base/src/lib/sqlite3"
 
+import "core:fmt"
 import "core:strings"
 
 Channel :: struct {
@@ -9,10 +10,6 @@ Channel :: struct {
 	server: Uuid,
 	name: string,
 }
-
-Channel_Row :: Db_Row_Spec{{"uuid", []u8}, {"server", []u8}, {"name", cstring}}
-Channel_Cols :: "uuid, server, name"
-Channel_Cols_N :: 3
 Channel_Create_Table :: `-- sql
 	CREATE TABLE IF NOT EXISTS channel(
 	uuid            BLOB PRIMARY KEY,
@@ -23,33 +20,72 @@ Channel_Create_Table :: `-- sql
 	server, name
 	);`
 
-channel_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: Channel, err: Db_Error) {
-	res: [Channel_Cols_N]Db_Value
-	db_get_columns(stmt, Channel_Row, res[:]) or_return
+channel_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	switch self in obj {
+	case ^Channel:
+		err = db_scan_columns(stmt, {
+			{"uuid", self.uuid[:]},
+			{"server", self.server[:]},
+			{"name", &self.name},
+		})
+	case:
+		panic(fmt.tprintf("channel_from_row: bad type %v", obj))
+	}
+	return
+}
 
-	bs: []u8
-	bs = res[0].([]u8)
-	copy_exact(self.uuid[:], bs)
+channel_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	switch self in obj {
+	case Channel:
+		uuid := self.uuid
+		server := self.server
+		err = db_bind(stmt, {
+			{":uuid", uuid[:]},
+			{":server", server[:]},
+			{":name", self.name},
+		})
+	case:
+		panic(fmt.tprintf("channel_to_row: bad type %v", obj))
+	}
+	return
+}
 
-	bs = res[1].([]u8)
-	copy_exact(self.server[:], bs)
+channel_save :: proc(self: Channel, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	INSERT OR REPLACE INTO channel(uuid, server, name)
+	VALUES(:uuid, :server, :name);
+	`
+	stmt: sqlite3.Statement
+	stmt = db_prepare_bind_row(db, sql, self, channel_to_row) or_return
+	err = db_step_and_finalize_default_timeout(stmt)
+	return
+}
 
-	self.name = strings.clone_from_cstring(res[2].(cstring), allocator)
+channel_load_uuid :: proc(self: ^Channel, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	SELECT * FROM channel WHERE uuid = :uuid;`
+	return channel_load_(self, db, sql)
+}
+
+channel_load_ :: proc(self: ^Channel, db: Db, sql: cstring) -> (err: Db_Error) {
+	stmt: sqlite3.Statement
+
+	// set sql params required by sql from self
+	stmt = db_prepare_bind_row(db, sql, self^, channel_to_row) or_return
+	db_retrieve_one_and_finalize_default_timeout(stmt, self, channel_from_row) or_return
 	return
 }
 
 // Allocates to copy name string
-channel_init :: proc(self: ^Channel, uuid, server: Uuid, name: string, allocator := context.allocator) {
-	self.uuid = uuid
-	self.server = server
-	self.name = strings.clone(name, allocator)
+channel_init :: proc(self: ^Channel) {
+	self.name = strings.clone(self.name)
 }
 
-channel_deinit :: proc(self: ^Channel, allocator := context.allocator) {
-	delete(self.name, allocator)
+channel_deinit :: proc(self: ^Channel) {
+	delete(self.name)
 }
-channel_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
-	channel_deinit(cast(^Channel)self, allocator)
+channel_deinit_rawptr :: proc(self: rawptr) {
+	channel_deinit(cast(^Channel)self)
 }
 
 channel_create :: proc(task: Task) {
@@ -67,34 +103,15 @@ channel_create :: proc(task: Task) {
 		return
 	}
 
-	channel: Channel
-	channel_init(&channel, uuid=uuid_v7(), server=cmd.server, name=cmd.name)
-	err := channel_db_create(&channel, tl_db_conn)
+	channel := Channel{uuid=uuid_v7(), server=cmd.server, name=cmd.name}
+	err := channel_save(channel, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
-		cmd.result = new_clone(channel)
+		channel_copy := new_clone(channel)
+		channel_init(channel_copy)
+		cmd.result = channel_copy
 
 		task_data.result = cmd.result
 		task_data.result_deinit = channel_deinit_rawptr
 	}
-}
-
-channel_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	err = db_exec(db, Channel_Create_Table)
-	assert(err == nil)
-	return
-}
-
-channel_db_create :: proc(self: ^Channel, db: Db) -> (err: Db_Error) {
-	sql :: `-- sql
-	INSERT INTO channel (uuid, server, name)
-	VALUES(:uuid, :server, :name);
-	`
-	stmt := db_prepare_bind(db, sql, {
-		{":uuid", self.uuid[:]},
-		{":server", self.server[:]},
-		{":name", self.name},
-	}) or_return
-	defer db_finalize(stmt)
-	return db_insert_unique(stmt)
 }

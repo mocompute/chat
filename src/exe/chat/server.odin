@@ -9,58 +9,91 @@ Server :: struct {
 	name: string,
 }
 
-Server_Row :: Db_Row_Spec{{"uuid", []u8}, {"name", cstring}}
-Server_Cols :: "uuid, name"
-Server_Cols_N :: 2
+Server_Create_Table :: `-- sql
+	CREATE TABLE IF NOT EXISTS server(
+	uuid BLOB PRIMARY KEY,
+	name TEXT NOT NULL UNIQUE
+	) WITHOUT ROWID;
+	INSERT INTO server (uuid, name) VALUES (X'00000000000000000000000000000000', 'null');`
 
-server_from_row :: proc(stmt: sqlite3.Statement, allocator := context.allocator) -> (self: Server, err: Db_Error) {
-	res: [Server_Cols_N]Db_Value
-	db_get_columns(stmt, Server_Row, res[:]) or_return
 
-	uuid := res[0].([]u8)
-	copy_exact(self.uuid[:], uuid)
-
-	self.name = strings.clone_from_cstring(res[1].(cstring))
+server_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	switch self in obj {
+	case ^Server:
+		err = db_scan_columns(stmt, {
+			{"uuid", self.uuid[:]},
+			{"name", &self.name},
+		})
+	case:
+		panic(fmt.tprintf("server_from_row: bad type %v", obj))
+	}
 	return
 }
-server_deep_copy :: proc(self: Server, allocator := context.allocator) -> ^Server {
-	out := new_clone(self)
-	out.name = strings.clone(out.name, allocator)
-	return out
-}
-server_deinit :: proc(self: ^Server, allocator := context.allocator) {
-	delete(self.name, allocator)
-}
-server_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
-	server_deinit(cast(^Server)self, allocator)
+
+server_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	switch self in obj {
+	case Server:
+		uuid := self.uuid
+		err = db_bind(stmt, {
+			{":uuid", uuid[:]},
+			{":name", self.name},
+		})
+	case:
+		panic(fmt.tprintf("server_to_row: bad type %v", obj))
+	}
+	return
 }
 
-is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (is_error: bool) {
-	if err == .Exists || err == .Constraint_Failed {
-		is_error = true
-		task_data.status = .Conflict
-		if key != "" {
-			task_data.message = fmt.aprintf("constraint failed on '%s'", key)
-		}
-	} else if err == .Not_Found {
-		is_error = true
-		task_data.status = .Not_Found
-		if key != "" {
-			task_data.message = fmt.aprintf("'%s' not found", key)
-		}
-	} else if err == .Done {
-		task_data.status = .Ok
-	} else if err != nil {
-		is_error = true
-		task_data.status = .Database_Error
-		task_data.message = fmt.aprintf("database error: %s", err)
-	} else {
-		task_data.status = .Ok
-	}
+server_init :: proc(self: ^Server) {
+	self.name = strings.clone(self.name)
+}
 
-	if task_data.status != .Ok && task_data.message == "" {
-		task_data.message = fmt.aprintf("%v", err)
-	}
+server_deinit :: proc(self: ^Server) {
+	delete(self.name)
+}
+server_deinit_rawptr :: proc(self: rawptr) {
+	server_deinit(cast(^Server)self)
+}
+
+server_save :: proc(self: Server, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	INSERT OR REPLACE INTO server(uuid, name)
+	VALUES(:uuid, :name);`
+	return server_save_(self, db, sql)
+}
+
+server_insert_unique :: proc(self: Server, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	INSERT INTO server(uuid, name)
+	VALUES(:uuid, :name);`
+	return server_save_(self, db, sql)
+}
+
+server_save_ :: proc(self: Server, db: Db, sql: cstring) -> (err: Db_Error) {
+	stmt: sqlite3.Statement
+	stmt = db_prepare_bind_row(db, sql, self, server_to_row) or_return
+	db_step_and_finalize_default_timeout(stmt) or_return
+	return
+}
+
+server_load :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	SELECT * FROM server WHERE uuid = :uuid;`
+	return server_load_(self, db, sql)
+}
+
+server_load_name :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
+	sql :: `-- sql
+	SELECT * FROM server WHERE name = :name;`
+	return server_load_(self, db, sql)
+}
+
+server_load_ :: proc(self: ^Server, db: Db, sql: cstring) -> (err: Db_Error) {
+	stmt: sqlite3.Statement
+
+	// set sql params required by sql from self
+	stmt = db_prepare_bind_row(db, sql, self^, server_to_row) or_return
+	db_retrieve_one_and_finalize_default_timeout(stmt, self, server_from_row) or_return
 	return
 }
 
@@ -69,9 +102,13 @@ server_create :: proc(task: Task) {
 	cmd := task_data.action.(Command).(Server_Create)
 
 	server := Server{name=cmd.name, uuid=uuid_v7()}
-	err := server_db_create(&server, tl_db_conn)
+	err := server_insert_unique(server, tl_db_conn)
+
 	if !is_db_error(err, task_data, cmd.name) {
-		cmd.result = server_deep_copy(server)
+		server_copy := new_clone(server)
+		server_init(server_copy)
+		cmd.result = server_copy
+
 		task_data.result = cmd.result
 		task_data.result_deinit = server_deinit_rawptr
 	}
@@ -81,7 +118,9 @@ server_lookup_uuid :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.action.(Query).(Server_Lookup_Uuid)
 
-	server, err := server_db_lookup_uuid(tl_db_conn, q.uuid)
+	server: Server
+	server.uuid = q.uuid
+	err := server_load(&server, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(server)
@@ -94,59 +133,13 @@ server_lookup_name :: proc(task: Task) {
 	task_data := task_to_task_data(task)
 	q := task_data.action.(Query).(Server_Lookup_Name)
 
-	server, err := server_db_lookup_name(tl_db_conn, q.name, context.allocator)
+	server: Server
+	server.name = q.name
+	err := server_load_name(&server, tl_db_conn)
 
 	if !is_db_error(err, task_data) {
 		q.result = new_clone(server)
 		task_data.result = q.result
 		task_data.result_deinit = server_deinit_rawptr
 	}
-}
-
-server_db_create_tables :: proc(db: Db) -> (err: Db_Error) {
-	// Although UUIDs must be unique, we assume generation will never generate a
-	// duplicate, so we avoid a SQL index.
-	sql :: `-- sql
-	CREATE TABLE IF NOT EXISTS server(
-	uuid BLOB PRIMARY KEY,
-	name TEXT NOT NULL UNIQUE
-	) WITHOUT ROWID;
-	INSERT INTO server (uuid, name) VALUES (X'00000000000000000000000000000000', 'null');
-	`
-	err = db_exec(db, sql)
-	return
-}
-
-server_db_create :: proc(self: ^Server, db: Db) -> (err: Db_Error) {
-	sql :: `-- sql
-	INSERT INTO server (uuid, name)
-	VALUES (:uuid, :name);
-	`
-	stmt := db_prepare_bind(db, sql, {
-		{":uuid", self.uuid[:]},
-		{":name", self.name},
-	}) or_return
-	defer db_finalize(stmt)
-	return db_insert_unique(stmt)
-}
-
-server_db_lookup_uuid :: proc(db: Db, uuid: Uuid, allocator := context.allocator) -> (self: Server, err: Db_Error) {
-	uuid := uuid
-	sql :: `SELECT ` + Server_Cols + ` FROM server WHERE uuid = :uuid`
-	stmt := db_prepare_bind(db, sql, {
-		{":uuid", uuid[:]},
-	}) or_return
-	defer db_finalize(stmt)
-	self = db_retrieve_one(Server, stmt, server_from_row, allocator) or_return
-	return
-}
-
-server_db_lookup_name :: proc(db: Db, name: string, allocator := context.allocator) -> (self: Server, err: Db_Error) {
-	sql :: `SELECT ` + Server_Cols + ` FROM server WHERE name = :name`
-	stmt := db_prepare_bind(db, sql, {
-		{":name", name},
-	}) or_return
-	defer db_finalize(stmt)
-	self = db_retrieve_one(Server, stmt, server_from_row, allocator) or_return
-	return
 }
