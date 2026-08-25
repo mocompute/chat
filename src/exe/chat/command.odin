@@ -36,9 +36,19 @@ user's privileges. Actions which require privileges require a session Uuid.
 
 */
 
-Action :: union {
-	Command,
-	Query,
+API := map[string]Action_Constructor{
+	"database-create"      = {1, mk_database_create},
+	"channel-create"       = {3, mk_channel_create},
+	"server-create"        = {2, mk_server_create},
+	"server-lookup-name"   = {1, mk_server_lookup_name},
+	"server-lookup-uuid"   = {1, mk_server_lookup_uuid},
+	"session-create"       = {3, mk_session_create},
+	"session-refresh"      = {1, mk_session_refresh},
+	"user-create"          = {3, mk_user_create},
+	"user-lookup-username" = {2, mk_user_lookup_username},
+	"user-lookup-uuid"     = {1, mk_user_lookup_uuid},
+	"user-role-assign"     = {2, mk_user_role_assign},
+	"version"              = {0, mk_version_get},
 }
 
 Command :: union {
@@ -57,6 +67,11 @@ Query :: union {
 	User_Lookup_Username,
 	User_Lookup_Uuid,
 	Version_Get,
+}
+
+Action :: union {
+	Command,
+	Query,
 }
 
 Channel_Create :: struct {
@@ -149,31 +164,12 @@ Action_Error :: enum {
 	Bad_Argument,
 }
 
-API_Item :: struct {
-	command_word: string,
-	arity: int,
-	constructor: proc([]string, ^App) -> (Command, Query, Action_Error),
-}
 
 Action_Constructor :: struct {
 	arity: int,
 	constructor: proc([]string, ^App) -> (Action, Action_Error),
 }
 
-API := map[string]Action_Constructor{
-	"database-create"      = {1, mk_database_create},
-	"channel-create"       = {3, mk_channel_create},
-	"server-create"        = {2, mk_server_create},
-	"server-lookup-name"   = {1, mk_server_lookup_name},
-	"server-lookup-uuid"   = {1, mk_server_lookup_uuid},
-	"session-create"       = {3, mk_session_create},
-	"session-refresh"      = {1, mk_session_refresh},
-	"user-create"          = {3, mk_user_create},
-	"user-lookup-username" = {2, mk_user_lookup_username},
-	"user-lookup-uuid"     = {1, mk_user_lookup_uuid},
-	"user-role-assign"     = {2, mk_user_role_assign},
-	"version"              = {0, mk_version_get},
-}
 
 mk_version_get :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	action = Query(Version_Get{})
