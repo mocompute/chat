@@ -1,5 +1,6 @@
 package main
 
+import "base:intrinsics"
 import "core:crypto"
 import "../../../../base/src/lib/sqlite3"
 @(require) import "core:fmt"
@@ -19,32 +20,22 @@ Config_Create_Table :: `-- sql
 	version INTEGER,
 	pepper BLOB);`
 
-config_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case ^Config:
-		err = db_scan_columns(stmt, {
-			{"id", &self.id},
-			{"version", &self.version},
-			{"pepper", self.pepper[:]},
-		})
-	case:
-		panic(fmt.tprintf("config_from_row: bad type %v", obj))
-	}
+config_from_row :: proc(self: ^Config, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	err = db_scan_columns(stmt, {
+		{"id", &self.id},
+		{"version", &self.version},
+		{"pepper", self.pepper[:]},
+	})
 	return
 }
 
-config_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case Config:
-		pepper := self.pepper
-		err = db_bind(stmt, {
-			{":id", self.id},
-			{":version", self.version},
-			{":pepper", pepper[:]},
-		})
-	case:
-		panic(fmt.tprintf("config_to_row: bad type %v", obj))
-	}
+config_to_row :: proc(self: Config, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	pepper := self.pepper
+	err = db_bind(stmt, {
+		{":id", self.id},
+		{":version", self.version},
+		{":pepper", pepper[:]},
+	})
 	return
 }
 

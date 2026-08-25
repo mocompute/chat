@@ -1,7 +1,6 @@
 package main
 
 import "../../../../base/src/lib/sqlite3"
-import "core:fmt"
 import "core:strings"
 
 Server :: struct {
@@ -17,30 +16,20 @@ Server_Create_Table :: `-- sql
 	INSERT INTO server (uuid, name) VALUES (X'00000000000000000000000000000000', 'null');`
 
 
-server_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case ^Server:
-		err = db_scan_columns(stmt, {
-			{"uuid", self.uuid[:]},
-			{"name", &self.name},
-		})
-	case:
-		panic(fmt.tprintf("server_from_row: bad type %v", obj))
-	}
+server_from_row :: proc(self: ^Server, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	err = db_scan_columns(stmt, {
+		{"uuid", self.uuid[:]},
+		{"name", &self.name},
+	})
 	return
 }
 
-server_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case Server:
-		uuid := self.uuid
-		err = db_bind(stmt, {
-			{":uuid", uuid[:]},
-			{":name", self.name},
-		})
-	case:
-		panic(fmt.tprintf("server_to_row: bad type %v", obj))
-	}
+server_to_row :: proc(self: Server, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	uuid := self.uuid
+	err = db_bind(stmt, {
+		{":uuid", uuid[:]},
+		{":name", self.name},
+	})
 	return
 }
 

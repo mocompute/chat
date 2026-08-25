@@ -2,7 +2,6 @@ package main
 
 import "../../../../base/src/lib/sqlite3"
 
-import "core:fmt"
 import "core:strings"
 
 Channel :: struct {
@@ -20,33 +19,23 @@ Channel_Create_Table :: `-- sql
 	server, name
 	);`
 
-channel_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case ^Channel:
-		err = db_scan_columns(stmt, {
-			{"uuid", self.uuid[:]},
-			{"server", self.server[:]},
-			{"name", &self.name},
-		})
-	case:
-		panic(fmt.tprintf("channel_from_row: bad type %v", obj))
-	}
+channel_from_row :: proc(self: ^Channel, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	err = db_scan_columns(stmt, {
+		{"uuid", self.uuid[:]},
+		{"server", self.server[:]},
+		{"name", &self.name},
+	})
 	return
 }
 
-channel_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case Channel:
-		uuid := self.uuid
-		server := self.server
-		err = db_bind(stmt, {
-			{":uuid", uuid[:]},
-			{":server", server[:]},
-			{":name", self.name},
-		})
-	case:
-		panic(fmt.tprintf("channel_to_row: bad type %v", obj))
-	}
+channel_to_row :: proc(self: Channel, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	uuid := self.uuid
+	server := self.server
+	err = db_bind(stmt, {
+		{":uuid", uuid[:]},
+		{":server", server[:]},
+		{":name", self.name},
+	})
 	return
 }
 

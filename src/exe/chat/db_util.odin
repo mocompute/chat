@@ -22,26 +22,23 @@ Db_Scan_Spec :: struct {
 MAX_COLUMNS :: 32
 DEFAULT_TIMEOUT :: 5000
 
-// signature for source-to-row and row-to-destination
-Init_Proc :: proc(any, sqlite3.Statement) -> Db_Error
-
 db_prepare_bind :: proc(db: Db, sql: cstring, specs: []Db_Bind_Spec) -> (stmt: sqlite3.Statement, err: Db_Error) {
 	stmt = db_prepare(db, sql) or_return
 	db_bind(stmt, specs) or_return
 	return
 }
 
-db_prepare_bind_row :: proc(db: Db, sql: cstring, source: any, init: Init_Proc) -> (stmt: sqlite3.Statement, err: Db_Error) {
+db_prepare_bind_row :: proc(db: Db, sql: cstring, source: $T, to_row_proc: proc(T, sqlite3.Statement) -> Db_Error) -> (stmt: sqlite3.Statement, err: Db_Error) {
 	stmt = db_prepare(db, sql) or_return
-	init(source, stmt) or_return
+	to_row_proc(source, stmt) or_return
 	return
 }
 
-db_retrieve_one_scan :: proc(stmt: sqlite3.Statement, destination: any, init: Init_Proc, timeout: uint) -> (err: Db_Error) {
+db_retrieve_one_scan :: proc(stmt: sqlite3.Statement, destination: $T, from_row_proc: proc(T, sqlite3.Statement) -> Db_Error, timeout: uint) -> (err: Db_Error) {
 	err = db_step(stmt, timeout)
 
 	if err == sqlite3.Result.Row {
-		init(destination, stmt) or_return
+		from_row_proc(destination, stmt) or_return
 		err = nil
 	} else if err == sqlite3.Result.Done {
 		err = .Not_Found
@@ -51,8 +48,8 @@ db_retrieve_one_scan :: proc(stmt: sqlite3.Statement, destination: any, init: In
 	return
 }
 
-db_retrieve_one_and_finalize_default_timeout :: proc(stmt: sqlite3.Statement, dest: any, init: Init_Proc) -> (err: Db_Error) {
-	err = db_retrieve_one_scan(stmt, dest, init, 0)
+db_retrieve_one_and_finalize_default_timeout :: proc(stmt: sqlite3.Statement, dest: $T, from_row_proc: proc(T, sqlite3.Statement) -> Db_Error) -> (err: Db_Error) {
+	err = db_retrieve_one_scan(stmt, dest, from_row_proc, 0)
 	sqlite3.finalize(stmt)
 	return
 }

@@ -42,41 +42,31 @@ User_Create_Table :: `-- sql
 	server, username
 	);`
 
-user_from_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case ^User:
-		err = db_scan_columns(stmt, {
-			{"uuid", self.uuid[:]},
-			{"server", self.server[:]},
-			{"username", &self.username},
-			{"hashed_password", self.hashed_password[:]},
-			{"salt", self.salt[:]},
-			{"role", cast(^int)(&self.role)},
-		})
-	case:
-		panic(fmt.tprintf("user_from_row: bad type %v", obj))
-	}
+user_from_row :: proc(self: ^User, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	err = db_scan_columns(stmt, {
+		{"uuid", self.uuid[:]},
+		{"server", self.server[:]},
+		{"username", &self.username},
+		{"hashed_password", self.hashed_password[:]},
+		{"salt", self.salt[:]},
+		{"role", cast(^int)(&self.role)},
+	})
 	return
 }
 
-user_to_row :: proc(obj: any, stmt: sqlite3.Statement) -> (err: Db_Error) {
-	switch self in obj {
-	case User:
-		uuid := self.uuid
-		server := self.server
-		hashed_password := self.hashed_password
-		salt := self.salt
-		err = db_bind(stmt, {
-			{":uuid", uuid[:]},
-			{":server", server[:]},
-			{":username", self.username},
-			{":hashed_password", hashed_password[:]},
-			{":salt", salt[:]},
-			{":role", int(self.role)},
-		})
-	case:
-		panic(fmt.tprintf("user_to_row: bad type %v", obj))
-	}
+user_to_row :: proc(self: User, stmt: sqlite3.Statement) -> (err: Db_Error) {
+	uuid := self.uuid
+	server := self.server
+	hashed_password := self.hashed_password
+	salt := self.salt
+	err = db_bind(stmt, {
+		{":uuid", uuid[:]},
+		{":server", server[:]},
+		{":username", self.username},
+		{":hashed_password", hashed_password[:]},
+		{":salt", salt[:]},
+		{":role", int(self.role)},
+	})
 	return
 }
 
