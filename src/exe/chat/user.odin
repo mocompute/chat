@@ -103,7 +103,7 @@ user_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
 
 user_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	cmd := task_data.command.(User_Create)
+	cmd := task_data.action.(Command).(User_Create)
 
 	user: User
 	alloc_err := user_init(&user, cmd.server, cmd.username, cmd.password, cmd.pepper[:])
@@ -124,7 +124,7 @@ user_create :: proc(task: Task) {
 
 user_lookup_username :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	q := task_data.query.(User_Lookup_Username)
+	q := task_data.action.(Query).(User_Lookup_Username)
 
 	user, err := user_db_lookup_username(tl_db_conn, q.server, q.username, context.allocator)
 
@@ -138,7 +138,7 @@ user_lookup_username :: proc(task: Task) {
 }
 user_lookup_uuid :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	q := task_data.query.(User_Lookup_Uuid)
+	q := task_data.action.(Query).(User_Lookup_Uuid)
 
 	user, err := user_db_lookup_uuid(tl_db_conn, q.user, context.allocator)
 
@@ -153,7 +153,7 @@ user_lookup_uuid :: proc(task: Task) {
 
 user_role_assign :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	cmd := task_data.command.(User_Role_Assign)
+	cmd := task_data.action.(Command).(User_Role_Assign)
 
 	user, err := user_db_lookup_uuid(tl_db_conn, cmd.user)
 	if err != nil {

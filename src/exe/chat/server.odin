@@ -66,7 +66,7 @@ is_db_error :: proc(err: Db_Error, task_data: ^Task_Data, key: string = "") -> (
 
 server_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	cmd := task_data.command.(Server_Create)
+	cmd := task_data.action.(Command).(Server_Create)
 
 	server := Server{name=cmd.name, uuid=uuid_v7()}
 	err := server_db_create(&server, tl_db_conn)
@@ -79,7 +79,7 @@ server_create :: proc(task: Task) {
 
 server_lookup_uuid :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	q := task_data.query.(Server_Lookup_Uuid)
+	q := task_data.action.(Query).(Server_Lookup_Uuid)
 
 	server, err := server_db_lookup_uuid(tl_db_conn, q.uuid)
 
@@ -92,7 +92,7 @@ server_lookup_uuid :: proc(task: Task) {
 
 server_lookup_name :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	q := task_data.query.(Server_Lookup_Name)
+	q := task_data.action.(Query).(Server_Lookup_Name)
 
 	server, err := server_db_lookup_name(tl_db_conn, q.name, context.allocator)
 

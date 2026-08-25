@@ -31,8 +31,7 @@ Task_Proc_Status :: enum {
 Task_Data :: struct {
 	id: Uuid,
 	app: ^App,
-	command: Command,
-	query: Query,
+	action: Action,
 
 	result: union {
 		rawptr,		// will be freed by task_data_destroy

@@ -1,3 +1,4 @@
+#+feature dynamic-literals
 package main
 
 import "core:fmt"
@@ -5,7 +6,7 @@ import "core:strconv"
 
 /*
 
-Commands and Queries
+Actions: Commands and Queries
 
 Commands are processed by a single worker thread to write to the database. Queries are
 processed by a worker pool. All Commands and Queries return a result code in
@@ -35,6 +36,29 @@ user's privileges. Actions which require privileges require a session Uuid.
 
 */
 
+Action :: union {
+	Command,
+	Query,
+}
+
+Command :: union {
+	Channel_Create,
+	Database_Create,
+	Server_Create,
+	Session_Create,
+	Session_Refresh,
+	User_Create,
+	User_Role_Assign,
+}
+
+Query :: union {
+	Server_Lookup_Name,
+	Server_Lookup_Uuid,
+	User_Lookup_Username,
+	User_Lookup_Uuid,
+	Version_Get,
+}
+
 Channel_Create :: struct {
 	session: Uuid,
 	server: Uuid,
@@ -43,8 +67,6 @@ Channel_Create :: struct {
 
 	session_manager: ^Session_Manager,
 }
-
-
 
 Database_Create :: struct {
 	path: string,
@@ -119,23 +141,6 @@ Version_Get :: struct {
 }
 
 
-
-Command :: union {
-	Channel_Create,
-	Database_Create,
-	Server_Create,
-	Session_Create,
-	Session_Refresh,
-	User_Create,
-	User_Role_Assign,
-}
-Query :: union {
-	Server_Lookup_Name,
-	Server_Lookup_Uuid,
-	User_Lookup_Username,
-	User_Lookup_Uuid,
-	Version_Get,
-}
 Action_Error :: enum {
 	None,
 	Not_Found,
@@ -150,69 +155,59 @@ API_Item :: struct {
 	constructor: proc([]string, ^App) -> (Command, Query, Action_Error),
 }
 
-DB_CREATE_COMMAND :: "db-create"
-API :: [?]API_Item{
-	{DB_CREATE_COMMAND, 1, mk_database_create},
-	{"channel-create", 3, mk_channel_create},
-	{"server-create", 2, mk_server_create},
-	{"server-lookup-name", 1, mk_server_lookup_name},
-	{"server-lookup-uuid", 1, mk_server_lookup_uuid},
-	{"session-create", 3, mk_session_create},
-	{"session-refresh", 1, mk_session_refresh},
-	{"user-create", 3, mk_user_create},
-	{"user-lookup-username", 2, mk_user_lookup_username},
-	{"user-lookup-uuid", 1, mk_user_lookup_uuid},
-	{"user-role-assign", 2, mk_user_role_assign},
-	{"version", 0, mk_version_get},
+Action_Constructor :: struct {
+	arity: int,
+	constructor: proc([]string, ^App) -> (Action, Action_Error),
 }
 
-api_index: map[string]API_Item
-api_index_init :: proc() {
-	if api_index == nil {
-		api_index = make(map[string]API_Item)
-		reserve(&api_index, len(API))
-		for item in API {
-			api_index[item.command_word] = item
-		}
-	}
+API := map[string]Action_Constructor{
+	"database-create"      = {1, mk_database_create},
+	"channel-create"       = {3, mk_channel_create},
+	"server-create"        = {2, mk_server_create},
+	"server-lookup-name"   = {1, mk_server_lookup_name},
+	"server-lookup-uuid"   = {1, mk_server_lookup_uuid},
+	"session-create"       = {3, mk_session_create},
+	"session-refresh"      = {1, mk_session_refresh},
+	"user-create"          = {3, mk_user_create},
+	"user-lookup-username" = {2, mk_user_lookup_username},
+	"user-lookup-uuid"     = {1, mk_user_lookup_uuid},
+	"user-role-assign"     = {2, mk_user_role_assign},
+	"version"              = {0, mk_version_get},
 }
-api_index_deinit :: proc() {
-	delete(api_index)
-	api_index = nil
-}
-mk_version_get :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	query = Version_Get{}
+
+mk_version_get :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
+	action = Query(Version_Get{})
 	return
 }
-mk_channel_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_channel_create :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	server := _get_uuid(words[1]) or_return
 	session := _get_uuid(words[2]) or_return
 	name := words[3]
 
-	command = Channel_Create{server=server, session=session, name=name, session_manager=&app.session_manager}
+	action = Command(Channel_Create{server=server, session=session, name=name, session_manager=&app.session_manager})
 	return
 }
-mk_database_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	command = Database_Create{path=words[1]}
+mk_database_create :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
+	action = Command(Database_Create{path=words[1]})
 	return
 }
-mk_server_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_server_create :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	sc: Server_Create
 	sc.session = _get_uuid(words[1]) or_return
 	sc.name = words[2]
-	command = sc
+	action = Command(sc)
 	return
 }
-mk_server_lookup_name :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	query = Server_Lookup_Name{name=words[1]}
+mk_server_lookup_name :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
+	action = Query(Server_Lookup_Name{name=words[1]})
 	return
 }
-mk_server_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_server_lookup_uuid :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	uuid := _get_uuid(words[1]) or_return
-	query = Server_Lookup_Uuid{uuid=uuid}
+	action = Query(Server_Lookup_Uuid{uuid=uuid})
 	return
 }
-mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_session_create :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	server := words[1]
 	username := words[2]
 	password := words[3]
@@ -222,20 +217,20 @@ mk_session_create :: proc(words: []string, app: ^App) -> (command: Command, quer
 	sc.session_manager = &app.session_manager
 	sc.server = _get_uuid(server) or_return
 
-	command = sc
+	action = Command(sc)
 	return
 }
-mk_session_refresh :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_session_refresh :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	session := words[1]
 
 	sr: Session_Refresh
 	sr.session_manager = &app.session_manager
 	sr.uuid = _get_uuid(session) or_return
 
-	command = sr
+	action = Command(sr)
 	return
 }
-mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_user_create :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	server := words[1]
 	username := words[2]
 	password := words[3]
@@ -244,26 +239,26 @@ mk_user_create :: proc(words: []string, app: ^App) -> (command: Command, query: 
 	uc.server = _get_uuid(server) or_return
 	uc.pepper = app.config.pepper
 
-	command = uc
+	action = Command(uc)
 	return
 }
-mk_user_lookup_username :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_user_lookup_username :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	server := words[1]
 	username := words[2]
 	ulu := User_Lookup_Username{username=username}
 	ulu.server = _get_uuid(server) or_return
-	query = ulu
+	action = Query(ulu)
 	return
 }
-mk_user_lookup_uuid :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_user_lookup_uuid :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	user := words[1]
 
 	ulu: User_Lookup_Uuid
 	ulu.user = _get_uuid(user) or_return
-	query = ulu
+	action = Query(ulu)
 	return
 }
-mk_user_role_assign :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
+mk_user_role_assign :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
 	user := words[1]
 	role, ok := user_role_from_string(words[2])
 	if !ok {
@@ -274,7 +269,7 @@ mk_user_role_assign :: proc(words: []string, app: ^App) -> (command: Command, qu
 	cmd: User_Role_Assign
 	cmd.user = _get_uuid(user) or_return
 	cmd.role = User_Role(role)
-	command = cmd
+	action = Command(cmd)
 	return
 }
 
@@ -300,18 +295,16 @@ _get_integer :: proc(s: string) -> (i64, Action_Error) {
 	return integer, nil
 }
 
-words_to_action :: proc(words: []string, app: ^App) -> (command: Command, query: Query, err: Action_Error) {
-	if len(words) == 0 do return nil, nil, .Empty
-	assert(api_index != nil)
+words_to_action :: proc(words: []string, app: ^App) -> (action: Action, err: Action_Error) {
+	if len(words) == 0 do return nil, .Empty
 
-	api_item, ok := api_index[words[0]]
+	api_item, ok := API[words[0]]
 	if !ok {
 		fmt.eprintfln("error: words_to_action: not found: %s", words[0])
-		fmt.eprintfln("error: words_to_action: len = %d", len(api_index))
 	}
-	if !ok do return nil, nil, .Not_Found
+	if !ok do return nil, .Not_Found
 
-	if api_item.arity != len(words) - 1 do return nil, nil, .Bad_Arity
+	if api_item.arity != len(words) - 1 do return nil, .Bad_Arity
 
 	return api_item.constructor(words, app)
 }
@@ -332,9 +325,10 @@ action_error_to_string :: proc(error: Action_Error) -> (msg: string) {
 	return
 }
 
-action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
-	if command != nil {
-		switch _ in command {
+action_to_procedure :: proc(action: Action) -> (p: Task_Proc) {
+	switch v in action {
+	case Command:
+		switch _ in v {
 		case Channel_Create:    p = channel_create
 		case Database_Create:   p = nil
 		case Server_Create:     p = server_create
@@ -343,53 +337,50 @@ action_to_procedure :: proc(command: Command, query: Query) -> (p: Task_Proc) {
 		case User_Create:       p = user_create
 		case User_Role_Assign:  p = user_role_assign
 		}
-
-	} else if query != nil {
-		switch _ in query {
+	case Query:
+		switch _ in v {
 		case Server_Lookup_Name:    p = server_lookup_name
 		case Server_Lookup_Uuid:    p = server_lookup_uuid
 		case User_Lookup_Username:  p = user_lookup_username
 		case User_Lookup_Uuid:      p = user_lookup_uuid
 		case Version_Get:           p = version_get
 		}
-
 	}
 	return
 }
 
 // Callback must free task_data AND task_data.message
-action_cast :: proc(task_manager: ^Task_Manager, command: Command, query: Query, app: ^App, callback: Task_Callback, callback_data: rawptr) -> (id: Uuid) {
-	task_data, procedure := _create_task(command, query)
-	if !handled_immediate_task(task_data, procedure, command, query) {
+action_cast :: proc(task_manager: ^Task_Manager, action: Action, app: ^App, callback: Task_Callback, callback_data: rawptr) -> (id: Uuid) {
+	task_data, procedure := _create_task(action)
+	if !handled_immediate_task(task_data, procedure, action) {
 		id = task_manager_cast(task_manager, procedure, task_data, app, callback, callback_data)
 	}
 	return
 }
 
 // Caller must free task_data AND task_data.message
-action_call :: proc(task_manager: ^Task_Manager, command: Command, query: Query, app: ^App) -> (task_data: ^Task_Data) {
+action_call :: proc(task_manager: ^Task_Manager, action: Action, app: ^App) -> (task_data: ^Task_Data) {
 	procedure: Task_Proc
-	task_data, procedure = _create_task(command, query)
-	if !handled_immediate_task(task_data, procedure, command, query) {
+	task_data, procedure = _create_task(action)
+	if !handled_immediate_task(task_data, procedure, action) {
 		task_manager_call(task_manager, procedure, task_data, app)
 	}
 	return
 }
 
-_create_task :: proc(command: Command, query: Query) -> (task_data: ^Task_Data, procedure: Task_Proc) {
-	ensure( (command != nil && query == nil) || (command == nil && query != nil) )
+_create_task :: proc(action: Action) -> (task_data: ^Task_Data, procedure: Task_Proc) {
 	task_data = new(Task_Data)
 
-	task_data.command = command
-	task_data.query = query
+	task_data.action = action
 
-	procedure = action_to_procedure(command, query)
+	procedure = action_to_procedure(action)
 	return
 }
 
-handled_immediate_task :: proc(task_data: ^Task_Data, procedure: Task_Proc, command: Command, query: Query) -> (handled: bool) {
+handled_immediate_task :: proc(task_data: ^Task_Data, procedure: Task_Proc, action: Action) -> (handled: bool) {
 	if procedure == nil {
-		if command != nil {
+		switch command in action {
+		case Command:
 			if dc, ok := command.(Database_Create); ok {
 				// Database_Create cannot use worker pool, since pool
 				// requires existing open database connections.
@@ -402,6 +393,7 @@ handled_immediate_task :: proc(task_data: ^Task_Data, procedure: Task_Proc, comm
 				}
 				return true
 			}
+		case Query:
 		}
 
 		ensure(false, "nil procedure and no valid command")

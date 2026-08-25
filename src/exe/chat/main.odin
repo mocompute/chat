@@ -28,10 +28,8 @@ App :: struct {
 }
 
 app_init :: proc(^App) {
-	api_index_init()
 }
 app_deinit :: proc(^App) {
-	api_index_deinit()
 }
 
 app_open_db :: proc(self: ^App, db_path: string) {
@@ -95,22 +93,20 @@ fatal :: proc(message: string, exit := true) {
 // Caller must task_data_destroy the return value.
 @(require_results)
 _dispatch :: proc(self: ^App, words: []string, exit_on_error: bool) -> (td: ^Task_Data) {
-	command, query, err := words_to_action(words, self)
+	action, err := words_to_action(words, self)
 	if err == nil {
-		if (command != nil && query != nil) || (command == nil && query == nil) {
-			fatal(fmt.tprintfln("fatal: invalid command=%v, query=%v", command, query))
-		}
-		td = action_call(&self.command_pool, command, query, self)
+		td = action_call(&self.command_pool, action, self)
 	} else {
 		fatal(fmt.tprintfln("error: %s: '%s'", action_error_to_string(err), words[0]), exit_on_error)
 		return
 	}
 
 	if td.status != .Ok {
-		if td.command != nil {
-			fmt.eprintfln("error: %v failed: %s", reflect.union_variant_typeid(td.command), td.message)
-		} else if td.query != nil {
-			fmt.eprintfln("error: %v failed: %s", reflect.union_variant_typeid(td.query), td.message)
+		switch v in td.action {
+		case Command:
+			fmt.eprintfln("error: %v failed: %s", reflect.union_variant_typeid(v), td.message)
+		case Query:
+			fmt.eprintfln("error: %v failed: %s", reflect.union_variant_typeid(v), td.message)
 		}
 		if exit_on_error {
 			os.exit(1)
@@ -130,18 +126,16 @@ dispatch :: proc(self: ^App, words: []string) -> ^Task_Data {
 }
 
 dispatch_async :: proc(self: ^App, words: []string, cb: Task_Callback, cb_data: rawptr = nil, allocator := context.allocator) -> (task_manager: ^Task_Manager, id: Uuid, err: Task_Proc_Status) {
-	command, query, action_err := words_to_action(words, self)
+	action, action_err := words_to_action(words, self)
 	if action_err == nil {
-		if (command != nil && query != nil) || (command == nil && query == nil) {
-			fatal(fmt.tprintfln("fatal: invalid command=%v, query=%v", command, query))
-		}
-		if command != nil {
+		switch v in action {
+		case Command:
 			task_manager = &self.command_pool
-			id = action_cast(task_manager, command, nil, self, cb, cb_data)
-		} else if query != nil {
+			id = action_cast(task_manager, action, self, cb, cb_data)
+		case Query:
 			task_manager = &self.query_pool
-			id = action_cast(task_manager, nil, query, self, cb, cb_data)
-		} else {
+			id = action_cast(task_manager, action, self, cb, cb_data)
+		case:
 			td := new(Task_Data)
 			td.status = .Not_Found
 			td.message = fmt.aprintfln("error: not found: '%s'", words[0], allocator=allocator)
@@ -184,7 +178,7 @@ main :: proc () {
 		os.exit(1)
 	}
 
-	if opts.overflow[0] != DB_CREATE_COMMAND {
+	if opts.overflow[0] != "database-create" {
 		app_open_db(&app, opts.db)
 		defer app_close_db(&app)
 		main_dispatch(&app, opts.overflow[:])

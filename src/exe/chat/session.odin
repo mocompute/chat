@@ -99,7 +99,7 @@ session_manager_refresh :: proc(self: ^Session_Manager, uuid: Uuid, db: Db) -> (
 
 session_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	cmd := task_data.command.(Session_Create)
+	cmd := task_data.action.(Command).(Session_Create)
 
 	user, err := user_db_lookup_username(tl_db_conn, cmd.server, cmd.username)
 	defer user_deinit(&user)
@@ -125,7 +125,7 @@ session_create :: proc(task: Task) {
 
 session_refresh :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	cmd := task_data.command.(Session_Refresh)
+	cmd := task_data.action.(Command).(Session_Refresh)
 
 	refreshed: Uuid
 	refreshed, task_data.status = session_manager_refresh(cmd.session_manager, cmd.uuid, tl_db_conn)

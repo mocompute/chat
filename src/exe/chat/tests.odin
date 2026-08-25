@@ -11,10 +11,10 @@ test_version :: proc(t: ^testing.T) {
 	app := test_db_init()
 
 	input: []string : {"version"}
-	_, query, err := words_to_action(input, app)
+	action, err := words_to_action(input, app)
 	testing.expect_value(t, err, nil)
 
-	td := action_call(&app.query_pool, nil, query, app)
+	td := action_call(&app.query_pool, action, app)
 	defer free(td)
 	testing.expect(t, td.status == .Ok)
 

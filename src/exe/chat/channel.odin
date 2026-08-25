@@ -54,7 +54,7 @@ channel_deinit_rawptr :: proc(self: rawptr, allocator := context.allocator) {
 
 channel_create :: proc(task: Task) {
 	task_data := task_to_task_data(task)
-	cmd := task_data.command.(Channel_Create)
+	cmd := task_data.action.(Command).(Channel_Create)
 
 	session, ok := session_manager_lookup(cmd.session_manager, cmd.session)
 	if !ok {
