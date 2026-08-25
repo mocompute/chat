@@ -1,7 +1,7 @@
 #+feature using-stmt
 package main
 
-import "../../../../base/src/lib/sqlite3"
+import sqlite3 "../../vendor/sqlite"
 import "core:c"
 import "core:fmt"
 import "core:mem"
