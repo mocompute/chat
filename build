@@ -10,7 +10,7 @@
 # Note that this script is intentionally limited to POSIX sh, and does not use Bash
 # extensions.
 
-set -euo pipefail
+set -eu
 
 : "${ODIN:=../Odin/odin}"
 
@@ -43,7 +43,6 @@ exe_dirs="
 
 package_dirs="$lib_dirs $exe_dirs"
 
-opt_verbose=""
 opt_builds_to_run="$exe_dirs"
 opt_checks_to_run="$package_dirs"
 opt_tests_to_run="$package_dirs"
@@ -51,8 +50,10 @@ opt_tests_to_run="$package_dirs"
 run_builds()
 {
 	# Accepts $@ as extra build flags
-	if [ "$opt_builds_to_run" = "all" ]; then
+	if [ -z "$command_arg" ] || [ "$command_arg" = "all" ]; then
 		opt_builds_to_run="$exe_dirs"
+	else
+		opt_builds_to_run="$command_arg"
 	fi
 	for dir in $opt_builds_to_run; do
 		echo "Building $dir..."
@@ -64,8 +65,10 @@ run_builds()
 run_tests()
 {
 	# Accepts $@ as extra test flags
-	if [ "$opt_tests_to_run" = "all" ]; then
+	if [ -z "$command_arg" ] || [ "$command_arg" = "all" ]; then
 		opt_tests_to_run="$package_dirs"
+	else
+		opt_tests_to_run="$command_arg"
 	fi
 	for dir in $opt_tests_to_run; do
 		echo
@@ -76,8 +79,10 @@ run_tests()
 }
 
 run_checks() {
-	if [ "$opt_checks_to_run" = "all" ]; then
+	if [ -z "$command_arg" ] || [ "$command_arg" = "all" ]; then
 		opt_checks_to_run="$package_dirs"
+	else
+		opt_checks_to_run="$command_arg"
 	fi
 	for dir in $opt_checks_to_run; do
 		echo "Checking directory $dir..."
@@ -185,11 +190,10 @@ clean_sqlite3()
 }
 
 
-
 usage()
 {
 	if [ -z "$is_windows" ]; then
-		echo "Usage: $0 [options] <command> [-- [command-options]]"
+		echo "Usage: $0 [options] <command> [arg] [-- [command-options]]"
 	else
 		echo "Usage: SH.EXE $0 [options] <command> [-- [command-options]]"
 		echo "       ^^^^^^"
@@ -200,6 +204,7 @@ usage()
 	echo "Commands:"
 	echo "  build [all|directory]   Run all builds, or just a single directory."
 	echo "  check [all|directory]   Run all checks, or just a single directory."
+	echo "  odin [args]             Run odin CLI with zero or more args"
 	echo "  run <directory>         Building and run the executable in directory."
 	echo "  tags                    Make emacs etags."
 	echo "  test [all|directory]    Run all tests, or just a single directory."
@@ -241,92 +246,88 @@ shift_past_dash_dash()
 }
 
 
-parse_options "$@"
-
 if [ $# -eq 0 ]; then
 	usage
 	exit 1
 fi
 
+
+
+command=""
+command_arg=""
+
 while [ $# -gt 0 ]; do
 	case "$1" in
-		"build" )
-			if [ -n "${2:-}" ]; then
-				opt_builds_to_run="$2"
-				shift
-			fi
-			shift
-			n=$(shift_past_dash_dash "$@")
-			shift "$n"
-			run_builds "$@"
-			exit $?
+		-h | -help | --help)
+			usage
+			exit 0
+			;;
+		--)
+			break
 			;;
 
-		"check" )
-			if [ -n "${2:-}" ]; then
-				opt_checks_to_run="$2"
-				shift
-			fi
-			n=$(shift_past_dash_dash "$@")
-			shift "$n"
-			run_checks "$@"
-			exit $?
+		build)
+			command="build"
 			;;
-
-		"clean" )
-			clean_sqlite3
-			exit $?
+		check)
+			command="check"
 			;;
-
-		"odin" )
-			n=$(shift_past_dash_dash "$@")
-			shift "$n"
-			"$ODIN" "$@"
-			exit $?
+		clean)
+			command="clean"
 			;;
-
-		"run" )
-			if [ -n "${2:-}" ]; then
-				progname="$2"
-				shift 2
-				n=$(shift_past_dash_dash "$@")
-				shift "$n"
-				"$ODIN" run "$progname" $odin_options $check_options -- "$@"
+		odin)
+			command="odin"
+			;;
+		run)
+			command="run"
+			;;
+		tags)
+			command="tags"
+			;;
+		test)
+			command="test"
+			;;
+		vendor)
+			command="vendor"
+			;;
+		*)
+			if [ -n "$command" ] && [ -z "$command_arg" ]; then
+				command_arg="$1"
 			else
 				usage
 				exit 1
 			fi
-			exit $?
-			;;
-
-		"tags" )
-			make_etags
-			exit $?
-			;;
-
-		"test" )
-			if [ -n "${2:-}" ]; then
-				opt_tests_to_run="$2"
-				shift
-			fi
-			n=$(shift_past_dash_dash "$@")
-			shift "$n"
-			run_tests "$@"
-			exit $?
-			;;
-
-		"vendor" )
-			case "${2:-}" in
-				"sqlite3")
-					vendor_sqlite3
-					shift
-					;;
-			esac
-			exit $?
-			;;
-		*)
-			usage
-			exit 1
-			;;
 	esac
+	shift
 done
+
+case "$command" in
+	build)
+		run_builds "$@"
+		;;
+	check)
+		run_checks "$@"
+		;;
+	clean)
+		clean_sqlite3
+		;;
+	odin)
+		"$ODIN" "$command_arg" "$@"
+		;;
+	run)
+		"$ODIN" run "$command_arg" $odin_options $check_options -- "$@"
+		;;
+	tags)
+		make_etags
+		;;
+	test)
+		run_tests "$@"
+		;;
+	vendor)
+		case "$command_arg" in
+			sqlite3)
+				vendor_sqlite3
+				;;
+		esac
+		;;
+esac
