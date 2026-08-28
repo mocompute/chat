@@ -211,47 +211,11 @@ usage()
 	echo "  vendor sqlite3          Build SQLite3 from source, downloading if needed."
 }
 
-parse_options()
-{
-	while [ $# -gt 0 ]; do
-		case "$1" in
-			-h | -help | --help )
-				usage
-				exit 0
-				;;
-			-v | --verbose )
-				opt_verbose="yes"
-				;;
-			--)
-				break
-				;;
-		esac
-		shift
-	done
-}
-
-shift_past_dash_dash()
-{
-	# Return the number of shifts needed to pass "--". If there is no "--", will return
-	# number of shifts to skip all remaining arguments.
-	n=0
-	while [ $# -gt 0 ] && [ "$1" != "--" ]; do
-		shift
-		n=$((n + 1))
-	done
-	if [ "${1:-}" = "--" ]; then
-		n=$((n + 1))
-	fi
-	echo "$n"
-}
-
 
 if [ $# -eq 0 ]; then
 	usage
 	exit 1
 fi
-
-
 
 command=""
 command_arg=""
